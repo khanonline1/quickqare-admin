@@ -214,6 +214,52 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
             )}
           </div>
 
+          {(selected.estimateItems?.length > 0) && (
+            <div className="section" style={{ marginTop: 16 }}>
+              <div className="section-header" style={{ marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>Partner Estimate</h3>
+                <span className={`tag ${
+                  selected.estimateStatus === "approved" ? "tag-active" :
+                  selected.estimateStatus === "rejected" ? "tag-blocked" :
+                  selected.estimateStatus === "pending" ? "tag-pending" : ""
+                }`}>
+                  {(selected.estimateStatus || "none").toUpperCase()}
+                </span>
+              </div>
+              {selected.estimateSubmittedAt && (
+                <div className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+                  Submitted: {formatDateTime(selected.estimateSubmittedAt)}
+                  {selected.estimateApprovedAt && ` · Approved: ${formatDateTime(selected.estimateApprovedAt)}`}
+                  {selected.estimateRejectedAt && ` · Rejected: ${formatDateTime(selected.estimateRejectedAt)}`}
+                </div>
+              )}
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Unit Price</th>
+                    <th>Qty</th>
+                    <th>Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.estimateItems.map((item: any, i: number) => (
+                    <tr key={item.serviceId || i}>
+                      <td>{item.name}</td>
+                      <td>{currency.format(item.price || 0)}</td>
+                      <td>{item.quantity}</td>
+                      <td>{currency.format(item.lineTotal || 0)}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: "right", fontWeight: 600 }}>Estimate Total</td>
+                    <td style={{ fontWeight: 600 }}>{currency.format(selected.estimateTotal || 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="section" style={{ marginTop: 16 }}>
             <h3>Timeline</h3>
             <ul>

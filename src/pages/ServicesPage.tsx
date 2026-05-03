@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import type { ApiClient } from "../api/adminApi";
+import ReactCrop, { type Crop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 
 export default function ServicesPage({ api }: { api: ApiClient }) {
   const [rows, setRows] = useState<any[]>([]);
@@ -11,6 +13,7 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
   const [rowUploadBusy, setRowUploadBusy] = useState<Record<string, boolean>>({});
   const [categoryUploadBusy, setCategoryUploadBusy] = useState<Record<string, boolean>>({});
   const [subCategoryRowUploadBusy, setSubCategoryRowUploadBusy] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<"services" | "categories" | "subcategories">("services");
   const [form, setForm] = useState({
     name: "",
     categoryId: "",
@@ -24,6 +27,56 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
     imageUrl: "",
     duration: ""
   });
+
+  // --- Cropper State ---
+  const [cropModalInfo, setCropModalInfo] = useState<{
+    file: File;
+    src: string;
+    aspect: number;
+    onComplete: (file: File) => void;
+  } | null>(null);
+  const [crop, setCrop] = useState<Crop>({ unit: "%", width: 90, x: 5, y: 5, height: 90 });
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const startCrop = (file: File | undefined | null, aspect: number, onComplete: (f: File) => void) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      setCrop({ unit: "%", width: 90, x: 5, y: 5, height: 90 });
+      setCropModalInfo({ file, src: reader.result as string, aspect, onComplete });
+    });
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = () => {
+    if (!imgRef.current || !crop.width || !crop.height || !cropModalInfo) return;
+    const canvas = document.createElement("canvas");
+    const scaleX = imgRef.current.naturalWidth / imgRef.current.width;
+    const scaleY = imgRef.current.naturalHeight / imgRef.current.height;
+    canvas.width = crop.width * scaleX;
+    canvas.height = crop.height * scaleY;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(
+      imgRef.current,
+      crop.x * scaleX,
+      crop.y * scaleY,
+      crop.width * scaleX,
+      crop.height * scaleY,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const croppedFile = new File([blob], cropModalInfo.file.name, { type: cropModalInfo.file.type });
+      cropModalInfo.onComplete(croppedFile);
+      setCropModalInfo(null);
+    }, cropModalInfo.file.type, 0.95);
+  };
 
   const fetchRows = useCallback(async () => {
     const res = await api.get<any>("/services");
@@ -233,228 +286,287 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
 
   return (
     <>
-      <div className="section">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div>
-            <h3 style={{ marginBottom: 4 }}>Existing Services</h3>
-            <div className="muted">
-              {rows.length} services, {categories.length} categories, {subCategories.length} subcategories
+      <div className="row" style={{ marginBottom: "1rem", gap: "0.5rem" }}>
+        <button className={`button ${activeTab === "services" ? "" : "secondary"}`} onClick={() => setActiveTab("services")}>Services</button>
+        <button className={`button ${activeTab === "categories" ? "" : "secondary"}`} onClick={() => setActiveTab("categories")}>Categories</button>
+        <button className={`button ${activeTab === "subcategories" ? "" : "secondary"}`} onClick={() => setActiveTab("subcategories")}>Subcategories</button>
+      </div>
+
+      {activeTab === "services" && (
+        <>
+          <div className="section">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Create New Service</h3>
+              <button className="button secondary" onClick={seedDefaults}>Import Defaults</button>
             </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+              <input className="input" placeholder="Service Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="input" placeholder="Base Price (₹)" value={form.basePriceInr} onChange={(e) => setForm({ ...form, basePriceInr: e.target.value })} />
+              <input className="input" placeholder="Commission %" value={form.commissionPercent} onChange={(e) => setForm({ ...form, commissionPercent: e.target.value })} />
+              <input className="input" placeholder="Duration (mins)" value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 16 }}>
+              <div style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, background: "var(--panel-alt)" }}>
+                <h4 style={{ margin: "0 0 12px 0", fontSize: 14 }}>Category Assignment</h4>
+                <select className="input" value={form.categoryId} onChange={(e) => { const next = e.target.value; setForm({ ...form, categoryId: next, subCategoryId: "" }); fetchSubCategories(next); }} style={{ width: "100%", marginBottom: 8 }}>
+                  <option value="">Select an existing category</option>
+                  {categories.map((cat) => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
+                </select>
+                <div className="muted" style={{ marginBottom: 8, textAlign: "center", fontWeight: "bold" }}>— OR —</div>
+                <input className="input" placeholder="Create new category name" value={form.newCategoryName} onChange={(e) => setForm({ ...form, newCategoryName: e.target.value })} style={{ width: "100%" }} />
+              </div>
+
+              <div style={{ padding: 16, border: "1px solid var(--border)", borderRadius: 8, background: "var(--panel-alt)" }}>
+                <h4 style={{ margin: "0 0 12px 0", fontSize: 14 }}>Subcategory Assignment</h4>
+                <select className="input" value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} style={{ width: "100%", marginBottom: 8 }}>
+                  <option value="">Select an existing subcategory</option>
+                  {subCategories.map((sub) => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
+                </select>
+                <div className="muted" style={{ marginBottom: 8, textAlign: "center", fontWeight: "bold" }}>— OR —</div>
+                <input className="input" placeholder="Create new subcategory name" value={form.newSubCategoryName} onChange={(e) => setForm({ ...form, newSubCategoryName: e.target.value })} style={{ width: "100%", marginBottom: 8 }} />
+                <div className="row" style={{ gap: 8 }}>
+                  <input className="input" placeholder="Image URL (optional)" value={form.newSubCategoryImageUrl} onChange={(e) => setForm({ ...form, newSubCategoryImageUrl: e.target.value })} style={{ flex: 1 }} />
+                  <label className="button secondary upload-button">
+                    {subCategoryUploadBusy ? "..." : "Upload"}
+                    <input type="file" accept="image/*" onChange={(e) => { startCrop(e.target.files?.[0], 1 / 1, handleSubCategoryImageUpload); e.target.value = ''; }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: "0 0 12px 0", fontSize: 14 }}>Service Details & Media</h4>
+              <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                    <input className="input" placeholder="Service Image URL" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} style={{ flex: 1 }} />
+                    <label className="button secondary upload-button">
+                      {serviceUploadBusy ? "Uploading..." : "Upload Image"}
+                      <input type="file" accept="image/*" onChange={(e) => { startCrop(e.target.files?.[0], 8 / 11, handleServiceImageUpload); e.target.value = ''; }} />
+                    </label>
+                  </div>
+                  <textarea className="input" placeholder="Detailed service description..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ width: "100%", height: 80, resize: "vertical" }} />
+                </div>
+                
+                {(form.newSubCategoryImageUrl || form.imageUrl) ? (
+                  <div className="row" style={{ gap: 12 }}>
+                    {form.newSubCategoryImageUrl ? (
+                      <div className="image-preview-block">
+                        <div className="muted">Subcategory Preview</div>
+                        <img className="image-preview" src={form.newSubCategoryImageUrl} alt="Subcategory preview" style={{ height: 80 }} />
+                      </div>
+                    ) : null}
+                    {form.imageUrl ? (
+                      <div className="image-preview-block">
+                        <div className="muted">Service Preview</div>
+                        <img className="image-preview" src={form.imageUrl} alt="Service preview" style={{ height: 80 }} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <button className="button" style={{ width: "100%", padding: "12px", fontSize: 16, fontWeight: "bold" }} onClick={createService}>Create Service</button>
           </div>
-          <button className="button secondary" onClick={seedDefaults}>Import Defaults</button>
-        </div>
-        {pageError ? <div className="error-banner">{pageError}</div> : null}
-        {rows.length === 0 && !pageError ? <div className="muted">No services loaded yet.</div> : null}
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Category</th>
-              <th>Subcategory</th>
-              <th>Price</th>
-              <th>Commission %</th>
-              <th>Image URL</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row._id || row.id}>
-                <td>{row.name}</td>
-                <td>{row.category?.name || "-"}</td>
-                <td>{row.subCategory?.name || "-"}</td>
-                <td>
-                  <input
-                    className="input"
-                    style={{ width: 90 }}
-                    defaultValue={row.price}
-                    onBlur={(e) => updateService(row._id, { basePriceInr: Number(e.target.value) })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="input"
-                    style={{ width: 70 }}
-                    defaultValue={row.commissionPercent}
-                    onBlur={(e) => updateService(row._id, { commissionPercent: Number(e.target.value) })}
-                  />
-                </td>
-                <td>
-                  <div className="service-image-cell">
-                    <input
-                      className="input"
-                      style={{ width: 220 }}
-                      defaultValue={row.imageUrl || ""}
-                      onBlur={(e) => updateService(row._id, { imageUrl: e.target.value })}
-                    />
-                    <label className="button secondary upload-button inline-upload">
-                      {rowUploadBusy[row._id] ? "Uploading..." : "Upload"}
-                      <input type="file" accept="image/*" onChange={(e) => handleRowImageUpload(row._id, e.target.files?.[0])} />
-                    </label>
-                    {row.imageUrl ? <img className="table-image-preview" src={row.imageUrl} alt={row.name} /> : null}
-                  </div>
-                </td>
-                <td><span className="tag">{row.isActive ? "ENABLED" : "DISABLED"}</span></td>
-                <td>
-                  <div className="row">
-                    <button className="button secondary" onClick={() => toggleService(row._id, !row.isActive)}>
-                      {row.isActive ? "Disable" : "Enable"}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      <div className="section">
-        <h3>Home Screen Category Photos</h3>
-        <div className="muted" style={{ marginBottom: 12 }}>
-          These images are for the main service cards on the QuickQare home screen.
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Home image</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.map((category) => (
-              <tr key={category._id}>
-                <td>{category.name}</td>
-                <td>
-                  <div className="service-image-cell">
-                    <input
-                      className="input"
-                      style={{ width: 220 }}
-                      defaultValue={category.imageUrl || ""}
-                      onBlur={(e) => updateCategory(category._id, { imageUrl: e.target.value })}
-                    />
-                    <label className="button secondary upload-button inline-upload">
-                      {categoryUploadBusy[category._id] ? "Uploading..." : "Upload"}
-                      <input type="file" accept="image/*" onChange={(e) => handleCategoryImageUpload(category._id, e.target.files?.[0])} />
-                    </label>
-                    {category.imageUrl ? <img className="table-image-preview" src={category.imageUrl} alt={category.name} /> : null}
-                  </div>
-                </td>
-                <td><span className="tag">{category.isActive ? "ENABLED" : "DISABLED"}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          <div className="section">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <h3 style={{ marginBottom: 4 }}>Existing Services</h3>
+                <div className="muted">
+                  {rows.length} services across {categories.length} categories
+                </div>
+              </div>
+            </div>
+            {pageError ? <div className="error-banner">{pageError}</div> : null}
+            {rows.length === 0 && !pageError ? <div className="muted">No services loaded yet.</div> : null}
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Subcategory</th>
+                  <th>Price</th>
+                  <th>Commission %</th>
+                  <th>Image URL</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row._id || row.id}>
+                    <td>{row.name}</td>
+                    <td>{row.category?.name || "-"}</td>
+                    <td>{row.subCategory?.name || "-"}</td>
+                    <td>
+                      <input
+                        className="input"
+                        style={{ width: 90 }}
+                        defaultValue={row.price}
+                        onBlur={(e) => updateService(row._id, { basePriceInr: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="input"
+                        style={{ width: 70 }}
+                        defaultValue={row.commissionPercent}
+                        onBlur={(e) => updateService(row._id, { commissionPercent: Number(e.target.value) })}
+                      />
+                    </td>
+                    <td>
+                      <div className="service-image-cell">
+                        <input
+                          className="input"
+                          style={{ width: 220 }}
+                          defaultValue={row.imageUrl || ""}
+                          onBlur={(e) => updateService(row._id, { imageUrl: e.target.value })}
+                        />
+                        <label className="button secondary upload-button inline-upload">
+                          {rowUploadBusy[row._id] ? "Uploading..." : "Upload"}
+                          <input type="file" accept="image/*" onChange={(e) => {
+                            startCrop(e.target.files?.[0], 8 / 11, (f) => handleRowImageUpload(row._id, f));
+                            e.target.value = '';
+                          }} />
+                        </label>
+                        {row.imageUrl ? <img className="table-image-preview" src={row.imageUrl} alt={row.name} /> : null}
+                      </div>
+                    </td>
+                    <td><span className="tag">{row.isActive ? "ENABLED" : "DISABLED"}</span></td>
+                    <td>
+                      <div className="row">
+                        <button className="button secondary" onClick={() => toggleService(row._id, !row.isActive)}>
+                          {row.isActive ? "Disable" : "Enable"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
-      <div className="section">
-        <h3>Subcategory Photos</h3>
-        <div className="muted" style={{ marginBottom: 12 }}>
-          These can be used as section-level or option-level fallback images where subcategories are grouped.
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Subcategory</th>
-              <th>Category</th>
-              <th>Image</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subCategories.map((subCategory) => {
-              const parentCategory = categories.find((category) => category._id === subCategory.category);
-              return (
-                <tr key={subCategory._id}>
-                  <td>{subCategory.name}</td>
-                  <td>{parentCategory?.name || "-"}</td>
+      {activeTab === "categories" && (
+        <div className="section">
+          <h3>Home Screen Category Photos</h3>
+          <div className="muted" style={{ marginBottom: 12 }}>
+            These images are for the main service cards on the QuickQare home screen.
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Home image</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category) => (
+                <tr key={category._id}>
+                  <td>{category.name}</td>
                   <td>
                     <div className="service-image-cell">
                       <input
                         className="input"
                         style={{ width: 220 }}
-                        defaultValue={subCategory.imageUrl || ""}
-                        onBlur={(e) => updateSubCategory(subCategory._id, { imageUrl: e.target.value })}
+                        defaultValue={category.imageUrl || ""}
+                        onBlur={(e) => updateCategory(category._id, { imageUrl: e.target.value })}
                       />
                       <label className="button secondary upload-button inline-upload">
-                        {subCategoryRowUploadBusy[subCategory._id] ? "Uploading..." : "Upload"}
-                        <input type="file" accept="image/*" onChange={(e) => handleSubCategoryRowImageUpload(subCategory._id, e.target.files?.[0])} />
+                        {categoryUploadBusy[category._id] ? "Uploading..." : "Upload"}
+                        <input type="file" accept="image/*" onChange={(e) => {
+                          startCrop(e.target.files?.[0], 4 / 3, (f) => handleCategoryImageUpload(category._id, f));
+                          e.target.value = '';
+                        }} />
                       </label>
-                      {subCategory.imageUrl ? <img className="table-image-preview" src={subCategory.imageUrl} alt={subCategory.name} /> : null}
+                      {category.imageUrl ? <img className="table-image-preview" src={category.imageUrl} alt={category.name} /> : null}
                     </div>
                   </td>
-                  <td><span className="tag">{subCategory.isActive ? "ENABLED" : "DISABLED"}</span></td>
+                  <td><span className="tag">{category.isActive ? "ENABLED" : "DISABLED"}</span></td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="section">
-        <h3>Create Service</h3>
-        <div className="row">
-          <input className="input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <select
-            className="input"
-            value={form.categoryId}
-            onChange={(e) => {
-              const next = e.target.value;
-              setForm({ ...form, categoryId: next, subCategoryId: "" });
-              fetchSubCategories(next);
-            }}
-          >
-            <option value="">Select category</option>
-            {categories.map((cat) => (
-              <option key={cat._id} value={cat._id}>{cat.name}</option>
-            ))}
-          </select>
-          <input className="input" placeholder="Or new category name" value={form.newCategoryName} onChange={(e) => setForm({ ...form, newCategoryName: e.target.value })} />
-          <select
-            className="input"
-            value={form.subCategoryId}
-            onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })}
-          >
-            <option value="">Select subcategory</option>
-            {subCategories.map((sub) => (
-              <option key={sub._id} value={sub._id}>{sub.name}</option>
-            ))}
-          </select>
-          <input className="input" placeholder="Or new subcategory name" value={form.newSubCategoryName} onChange={(e) => setForm({ ...form, newSubCategoryName: e.target.value })} />
-          <input className="input" placeholder="Subcategory image URL" value={form.newSubCategoryImageUrl} onChange={(e) => setForm({ ...form, newSubCategoryImageUrl: e.target.value })} />
-          <label className="button secondary upload-button">
-            {subCategoryUploadBusy ? "Uploading..." : "Upload Subcategory Image"}
-            <input type="file" accept="image/*" onChange={(e) => handleSubCategoryImageUpload(e.target.files?.[0])} />
-          </label>
-          <input className="input" placeholder="Base price" value={form.basePriceInr} onChange={(e) => setForm({ ...form, basePriceInr: e.target.value })} />
-          <input className="input" placeholder="Commission %" value={form.commissionPercent} onChange={(e) => setForm({ ...form, commissionPercent: e.target.value })} />
-          <input className="input" placeholder="Duration (mins)" value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} />
-          <input className="input" placeholder="Image URL" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
-          <label className="button secondary upload-button">
-            {serviceUploadBusy ? "Uploading..." : "Upload Service Image"}
-            <input type="file" accept="image/*" onChange={(e) => handleServiceImageUpload(e.target.files?.[0])} />
-          </label>
-          <button className="button" onClick={createService}>Create</button>
+              ))}
+            </tbody>
+          </table>
         </div>
-        {(form.newSubCategoryImageUrl || form.imageUrl) ? (
-          <div className="row" style={{ marginTop: 12 }}>
-            {form.newSubCategoryImageUrl ? (
-              <div className="image-preview-block">
-                <div className="muted">Subcategory image preview</div>
-                <img className="image-preview" src={form.newSubCategoryImageUrl} alt="Subcategory preview" />
-              </div>
-            ) : null}
-            {form.imageUrl ? (
-              <div className="image-preview-block">
-                <div className="muted">Service image preview</div>
-                <img className="image-preview" src={form.imageUrl} alt="Service preview" />
-              </div>
-            ) : null}
+      )}
+
+      {activeTab === "subcategories" && (
+        <div className="section">
+          <h3>Subcategory Photos</h3>
+          <div className="muted" style={{ marginBottom: 12 }}>
+            These can be used as section-level or option-level fallback images where subcategories are grouped.
           </div>
-        ) : null}
-        <textarea className="input" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} style={{ width: "100%", marginTop: 10 }} />
-      </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Subcategory</th>
+                <th>Category</th>
+                <th>Image</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subCategories.map((subCategory) => {
+                const parentCategory = categories.find((category) => category._id === subCategory.category);
+                return (
+                  <tr key={subCategory._id}>
+                    <td>{subCategory.name}</td>
+                    <td>{parentCategory?.name || "-"}</td>
+                    <td>
+                      <div className="service-image-cell">
+                        <input
+                          className="input"
+                          style={{ width: 220 }}
+                          defaultValue={subCategory.imageUrl || ""}
+                          onBlur={(e) => updateSubCategory(subCategory._id, { imageUrl: e.target.value })}
+                        />
+                        <label className="button secondary upload-button inline-upload">
+                          {subCategoryRowUploadBusy[subCategory._id] ? "Uploading..." : "Upload"}
+                          <input type="file" accept="image/*" onChange={(e) => {
+                            startCrop(e.target.files?.[0], 1 / 1, (f) => handleSubCategoryRowImageUpload(subCategory._id, f));
+                            e.target.value = '';
+                          }} />
+                        </label>
+                        {subCategory.imageUrl ? <img className="table-image-preview" src={subCategory.imageUrl} alt={subCategory.name} /> : null}
+                      </div>
+                    </td>
+                    <td><span className="tag">{subCategory.isActive ? "ENABLED" : "DISABLED"}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {cropModalInfo ? (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ backgroundColor: "#fff", padding: 24, borderRadius: 12, maxWidth: "90vw", maxHeight: "90vh", overflow: "auto", width: 600 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Crop Image</h3>
+            <p className="muted" style={{ marginBottom: 16 }}>Drag the box to frame exactly what will be visible in the app.</p>
+            <div style={{ display: "flex", justifyContent: "center", backgroundColor: "#f1f3f7", padding: 20, borderRadius: 8, marginBottom: 20 }}>
+              <ReactCrop crop={crop} onChange={c => setCrop(c)} aspect={cropModalInfo.aspect}>
+                <img
+                  src={cropModalInfo.src}
+                  onLoad={(e) => { imgRef.current = e.currentTarget; }}
+                  style={{ maxHeight: "50vh", maxWidth: "100%", objectFit: "contain" }}
+                  alt="Crop preview"
+                />
+              </ReactCrop>
+            </div>
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <button className="button secondary" onClick={() => setCropModalInfo(null)}>Cancel</button>
+              <button className="button" onClick={handleCropComplete}>Apply & Upload</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

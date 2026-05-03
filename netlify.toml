@@ -1,0 +1,21 @@
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+
+[build.environment]
+  NODE_VERSION            = "18"
+  VITE_ADMIN_API_BASE_URL = "/api/v1/admin"
+
+# Proxy /api/* to the backend — browser calls Netlify (HTTPS), Netlify calls backend (HTTP)
+# This avoids mixed-content and CORS issues entirely
+[[redirects]]
+  from   = "/api/*"
+  to     = "http://168.144.64.189:4000/api/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback — all other paths serve index.html so React Router handles routing
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

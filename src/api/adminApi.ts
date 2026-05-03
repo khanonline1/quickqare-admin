@@ -49,6 +49,8 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
       request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
     patch: <T,>(path: string, body?: unknown) =>
       request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
+    put: <T,>(path: string, body?: unknown) =>
+      request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
     delete: <T,>(path: string) => request<T>(path, { method: "DELETE" }),
     uploadFile: async <T,>(path: string, file: File, fieldName = "image"): Promise<T> => {
       const tokens = getTokens();
@@ -71,7 +73,18 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
         throw new Error((json as { message?: string }).message || "Upload failed");
       }
       return json;
-    }
+    },
+
+    // Complaints APIs
+    getComplaints: (params?: Record<string, string>) => {
+      const query = params ? `?${new URLSearchParams(params)}` : "";
+      return request(`/complaints${query}`);
+    },
+    getComplaint: (id: string) => request(`/complaints/${id}`),
+    updateComplaintStatus: (id: string, data: { status: string; notes?: string }) =>
+      request(`/complaints/${id}/status`, { method: "PATCH", body: JSON.stringify(data) }),
+    resolveComplaint: (id: string, data: { resolution: string; refundAmount?: number; reServiceScheduled?: boolean }) =>
+      request(`/complaints/${id}/resolve`, { method: "PATCH", body: JSON.stringify(data) }),
   };
 }
 

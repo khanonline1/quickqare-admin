@@ -8,10 +8,29 @@ export default function Pagination({ meta, onPage }: { meta: ApiMeta; onPage: (p
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="row" style={{ marginTop: 12, alignItems: "center" }}>
-      <button className="button secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>Prev</button>
-      <span className="muted">Page {page} of {totalPages}</span>
-      <button className="button secondary" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Next</button>
+    <div className="pagination">
+      <span className="pagination-info">
+        Showing {total === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+      </span>
+      <div className="pagination-controls">
+        <button
+          className="button secondary sm"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          ← Prev
+        </button>
+        <span style={{ fontSize: 13, color: "var(--muted)", padding: "0 4px" }}>
+          {page} / {totalPages}
+        </span>
+        <button
+          className="button secondary sm"
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+        >
+          Next →
+        </button>
+      </div>
     </div>
   );
 }
