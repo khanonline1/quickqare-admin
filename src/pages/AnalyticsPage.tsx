@@ -235,7 +235,7 @@ function FunnelViz({ stages }: { stages: { stage: string; count: number }[] }) {
           <div key={i}>
             {i > 0 && <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "right", marginBottom: 3 }}>▼ {dropPct}% drop-off</div>}
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: `${Math.max(pct,5)}%`, minWidth: 80, background: colors[i]??"#64748b", borderRadius: 6, padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", transition: "width 0.6s ease", gap: 8, boxShadow: "0 2px 6px rgba(0,0,0,0.08)" }}>
+              <div style={{ width: `${Math.max(pct,5)}%`, minWidth: 80, background: colors[i]??"var(--muted)", borderRadius: 6, padding: "10px 14px", color: "#fff", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "space-between", transition: "width 0.6s ease", gap: 8, boxShadow: "0 2px 6px rgba(0,0,0,0.08)" }}>
                 <span style={{ opacity: 0.9, fontSize: 12, whiteSpace: "nowrap" }}>{s.stage}</span>
                 <span style={{ fontWeight: 700 }}>{s.count.toLocaleString("en-IN")}</span>
               </div>
@@ -320,7 +320,7 @@ function RevenueTab({ api, dr }: { api: ApiClient; dr: DateRange }) {
     color: ["#0ea5e9","#8b5cf6","#10b981","#f59e0b","#ef4444"][i],
   }));
 
-  const growthColor = booking?.growthPct === null ? "#64748b" : Number(booking?.growthPct) >= 0 ? "#10b981" : "#ef4444";
+  const growthColor = booking?.growthPct === null ? "var(--muted)" : Number(booking?.growthPct) >= 0 ? "#10b981" : "#ef4444";
   const growthLabel = booking?.growthPct === null ? "No prior data" : `${Number(booking?.growthPct) >= 0 ? "+" : ""}${booking?.growthPct}% vs prev period`;
 
   return (
@@ -488,7 +488,7 @@ function PartnersTab({ api, dr }: { api: ApiClient; dr: DateRange }) {
               <tbody>
                 {leaderboard.map((p, i) => (
                   <tr key={String(p._id)}>
-                    <td><span style={{ fontWeight: 700, color: i===0?"#f59e0b":i===1?"#64748b":i===2?"#b45309":"var(--muted)", fontSize: i<3?16:13 }}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</span></td>
+                    <td><span style={{ fontWeight: 700, color: i===0?"#f59e0b":i===1?"var(--muted)":i===2?"var(--warning-text)":"var(--muted)", fontSize: i<3?16:13 }}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}</span></td>
                     <td style={{ fontWeight: 600, color: "var(--text)" }}>{p.name}</td>
                     <td><code>{p.phone}</code></td>
                     <td><span className="tag">{p.jobCount} jobs</span></td>
@@ -737,7 +737,7 @@ function LiveTab({ api }: { api: ApiClient }) {
                   <tr key={String(b._id)}>
                     <td><code style={{ fontSize: 12 }}>{b.bookingNumber || "—"}</code></td>
                     <td>
-                      <span style={{ background: `${STATUS_COLORS[b.status] ?? "#64748b"}22`, color: STATUS_COLORS[b.status] ?? "#64748b", padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+                      <span style={{ background: `${STATUS_COLORS[b.status] ?? "#64748b"}22`, color: STATUS_COLORS[b.status] ?? "var(--muted)", padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
                         {b.status}
                       </span>
                     </td>

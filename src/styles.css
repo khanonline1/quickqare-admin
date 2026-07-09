@@ -89,6 +89,151 @@
   --radius-full: 9999px;
 }
 
+/* === DARK THEME === */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Brand — slightly brighter accent reads better on dark surfaces */
+  --accent: #38bdf8;
+  --accent-dark: #0ea5e9;
+  --accent-light: #7dd3fc;
+  --accent-50: rgba(56, 189, 248, 0.10);
+  --accent-100: rgba(56, 189, 248, 0.18);
+  --accent-border: rgba(56, 189, 248, 0.35);
+
+  /* Semantic — bright foreground, translucent tinted backgrounds */
+  --success: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.13);
+  --success-border: rgba(52, 211, 153, 0.30);
+  --success-text: #6ee7b7;
+
+  --warning: #fbbf24;
+  --warning-bg: rgba(245, 158, 11, 0.13);
+  --warning-border: rgba(251, 191, 36, 0.30);
+  --warning-text: #fcd34d;
+
+  --danger: #f87171;
+  --danger-bg: rgba(239, 68, 68, 0.13);
+  --danger-border: rgba(248, 113, 113, 0.30);
+  --danger-text: #fca5a5;
+
+  --purple: #a78bfa;
+  --purple-bg: rgba(139, 92, 246, 0.14);
+  --purple-border: rgba(167, 139, 250, 0.30);
+  --purple-text: #c4b5fd;
+
+  --orange: #fb923c;
+  --orange-bg: rgba(249, 115, 22, 0.13);
+  --orange-border: rgba(251, 146, 60, 0.30);
+  --orange-text: #fdba74;
+
+  --info: #60a5fa;
+  --info-bg: rgba(59, 130, 246, 0.13);
+  --info-border: rgba(96, 165, 250, 0.30);
+  --info-text: #93c5fd;
+
+  /* Surfaces — layered depth: page darkest, panels lighter */
+  --bg: #0a0e16;
+  --panel: #141a26;
+  --panel-alt: #1b2230;
+  --panel-hover: #1a212e;
+  --border: #283041;
+  --border-strong: #3a4456;
+  --border-subtle: #1d2533;
+
+  /* Text */
+  --text: #e9eef5;
+  --text-2: #c2ccdb;
+  --muted: #8a96a8;
+  --muted-2: #5e6a7d;
+
+  /* Sidebar — a touch lighter than page bg so it reads as a surface */
+  --sidebar-bg: #0e1420;
+  --sidebar-bg-2: #121a28;
+  --sidebar-text: #8b9aae;
+  --sidebar-text-hover: #cbd5e1;
+  --sidebar-active-text: #f1f5f9;
+  --sidebar-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-active: rgba(56, 189, 248, 0.16);
+  --sidebar-active-border: #38bdf8;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  /* Shadows — deeper black for dark surfaces */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.45);
+}
+
+/* Select dropdown chevron — lighter stroke in dark mode for contrast */
+[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a96a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* === THEME TOGGLE BUTTON === */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.theme-toggle:hover {
+  background: var(--panel-alt);
+  color: var(--text-2);
+  border-color: var(--border-strong);
+}
+
+/* === LIVE TRACKING — responsive map + list layout === */
+.lt-map-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  flex: 1;
+  min-height: 480px;
+}
+
+.lt-map-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  min-height: 480px;
+}
+
+.lt-mapcontainer {
+  height: 100%;
+  width: 100%;
+  min-height: 480px;
+}
+
+.lt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 560px;
+}
+
+/* Stack map above list on tablets/phones */
+@media (max-width: 860px) {
+  .lt-map-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .lt-map-wrap { min-height: 320px; }
+  .lt-mapcontainer { min-height: 320px; height: 320px; }
+  .lt-list { max-height: 420px; }
+}
+
 /* === RESET & BASE === */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -404,7 +549,11 @@ textarea {
   padding: 8px 12px;
   font-size: 14px;
   font-family: inherit;
-  background: var(--panel);
+  /* Use background-color (not the `background` shorthand) so it doesn't reset
+     the select arrow's background-image / background-repeat / background-position.
+     The shorthand here outranks the `select` rule (.input class > element) and
+     was forcing background-repeat back to `repeat`, tiling the chevron. */
+  background-color: var(--panel);
   color: var(--text);
   transition: border-color var(--transition), box-shadow var(--transition);
   outline: none;
@@ -425,13 +574,18 @@ textarea:focus {
 .input::placeholder { color: var(--muted-2); }
 
 select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
-  padding-right: 30px;
+  padding-right: 32px;
   cursor: pointer;
 }
+
+/* Hide the legacy IE/Edge native arrow */
+select::-ms-expand { display: none; }
 
 label {
   font-size: 13px;
@@ -1261,7 +1415,51 @@ label {
   margin: 24px 0;
 }
 
-/* === RESPONSIVE === */
+/* === HAMBURGER / DRAWER CONTROLS === */
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-right: 8px;
+  transition: background var(--transition);
+}
+
+.hamburger-btn:hover { background: var(--panel-alt); }
+
+.sidebar-close-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--sidebar-text);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sidebar-close-btn:hover { background: var(--sidebar-hover); color: var(--sidebar-text-hover); }
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 199;
+  animation: fadeIn 150ms ease;
+}
+
+/* === RESPONSIVE — TABLET (961px and below) === */
 @media (max-width: 960px) {
   .app { grid-template-columns: 1fr; }
 
@@ -1283,3 +1481,110 @@ label {
   .page-body { padding: 16px; }
   .topbar { padding: 12px 16px; }
 }
+
+/* === RESPONSIVE — MOBILE (768px and below) === */
+@media (max-width: 768px) {
+  /* Sidebar becomes a fixed off-canvas drawer */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh !important;
+    width: 260px;
+    z-index: 200;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    transform: translateX(-100%);
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+  }
+
+  .sidebar.sidebar-open { transform: translateX(0); }
+
+  /* Restore normal sidebar-header on mobile */
+  .sidebar-header {
+    border-bottom: 1px solid var(--sidebar-border) !important;
+    padding: 18px 16px !important;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Restore nav layout inside drawer */
+  .sidebar-nav {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    padding: 12px 10px !important;
+  }
+
+  .nav-item { width: 100% !important; }
+  .nav-section-label { display: block !important; }
+  .sidebar-footer { display: flex !important; }
+
+  /* Show hamburger & close buttons */
+  .hamburger-btn { display: flex; }
+  .sidebar-close-btn { display: flex; }
+
+  /* Content takes full width (sidebar is out of grid flow) */
+  .app { grid-template-columns: 1fr; }
+
+  /* Topbar tweaks */
+  .topbar { padding: 10px 14px; }
+  .topbar-left { flex-direction: row; align-items: center; gap: 0; }
+  .topbar-title { font-size: 15px; }
+
+  /* Hide email in topbar badge, keep only role pill */
+  .user-badge-email { display: none; }
+  .user-badge { padding: 5px 10px; gap: 6px; }
+
+  /* Page content */
+  .page-body { padding: 12px; }
+
+  /* Cards */
+  .card-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .card { padding: 14px; }
+  .card .value { font-size: 22px; }
+
+  /* Sections */
+  .section { padding: 14px; }
+  .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+
+  /* Grids */
+  .detail-grid { grid-template-columns: 1fr !important; }
+  .settings-grid { grid-template-columns: 1fr !important; }
+
+  /* Complaint detail header */
+  .complaint-detail-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+
+  /* Pagination stacks */
+  .pagination { flex-direction: column; gap: 10px; align-items: flex-start; }
+
+  /* Modal fits screen */
+  .modal-overlay { padding: 12px; }
+  .modal-box { padding: 20px; border-radius: var(--radius-lg); }
+  .modal-actions { flex-wrap: wrap; }
+
+  /* Filter bars wrap well */
+  .filter-bar { gap: 8px; }
+
+  /* Row wraps */
+  .row { gap: 8px; }
+}
+
+/* === Frosted-glass map tooltips (Leaflet) === */
+.leaflet-tooltip.glass-tip {
+  background: rgba(17, 24, 39, 0.32);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  padding: 6px 10px;
+  font-weight: 500;
+}
+.leaflet-tooltip.glass-tip strong { color: #fff; }
+.leaflet-tooltip.glass-tip.leaflet-tooltip-top::before    { border-top-color: rgba(17, 24, 39, 0.32); }
+.leaflet-tooltip.glass-tip.leaflet-tooltip-bottom::before { border-bottom-color: rgba(17, 24, 39, 0.32); }
+.leaflet-tooltip.glass-tip.leaflet-tooltip-left::before   { border-left-color: rgba(17, 24, 39, 0.32); }
+.leaflet-tooltip.glass-tip.leaflet-tooltip-right::before  { border-right-color: rgba(17, 24, 39, 0.32); }

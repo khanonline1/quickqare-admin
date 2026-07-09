@@ -1,12 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { NAV_ITEMS } from "../constants/nav";
 import type { AdminUser } from "../types/admin";
+import { useTheme } from "../hooks/useTheme";
 
 type LayoutProps = {
   admin: AdminUser;
   active: string;
   onNavigate: (key: string) => void;
   onLogout: () => void;
+  onLogoutAll: () => void;
   children: React.ReactNode;
 };
 
@@ -25,6 +27,11 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
     <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
       <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
       <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
+    </svg>
+  ),
+  helpers: (
+    <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
     </svg>
   ),
   services: (
@@ -78,6 +85,12 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
     </svg>
   ),
+  "live-tracking": (
+    <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="10" cy="10" r="3" />
+      <path fillRule="evenodd" d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z" clipRule="evenodd" />
+    </svg>
+  ),
   zones: (
     <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
       <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
@@ -86,6 +99,16 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   banners: (
     <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
       <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+    </svg>
+  ),
+  offers: (
+    <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+    </svg>
+  ),
+  notifications: (
+    <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
     </svg>
   ),
   roles: (
@@ -103,17 +126,32 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
     </svg>
   ),
+  "test-reset": (
+    <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor" style={{ color: "#dc2626" }}>
+      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+    </svg>
+  ),
 };
 
 function getPageTitle(active: string): string {
-  if (active === "policies") return "About Us & Policies";
   return NAV_ITEMS.find((i) => i.key === active)?.label ?? active;
 }
 
-export default function Layout({ admin, active, onNavigate, onLogout, children }: LayoutProps) {
+export default function Layout({ admin, active, onNavigate, onLogout, onLogoutAll, children }: LayoutProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutMenuOpen, setLogoutMenuOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
+
+  const handleNavigate = (key: string) => {
+    setMenuOpen(false);
+    onNavigate(key);
+  };
+
   return (
     <div className="app">
-      <aside className="sidebar">
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
+
+      <aside className={`sidebar${menuOpen ? " sidebar-open" : ""}`}>
         <div className="sidebar-header">
           <div className="brand">
             <div className="brand-icon">
@@ -126,16 +164,21 @@ export default function Layout({ admin, active, onNavigate, onLogout, children }
               <div className="brand-sub">Admin Console</div>
             </div>
           </div>
+          <button className="sidebar-close-btn" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
         </div>
 
         <nav className="sidebar-nav">
           <div className="nav-section-label">Main</div>
           <div className="nav">
-            {NAV_ITEMS.slice(0, 8).map((item) => (
+            {NAV_ITEMS.slice(0, 9).map((item) => (
               <button
                 key={item.key}
                 className={`nav-item${active === item.key ? " active" : ""}`}
-                onClick={() => onNavigate(item.key)}
+                onClick={() => handleNavigate(item.key)}
               >
                 {NAV_ICONS[item.key]}
                 {item.label}
@@ -145,11 +188,11 @@ export default function Layout({ admin, active, onNavigate, onLogout, children }
 
           <div className="nav-section-label" style={{ marginTop: 10 }}>Operations</div>
           <div className="nav">
-            {NAV_ITEMS.slice(8, 13).map((item) => (
+            {NAV_ITEMS.slice(9, 14).map((item) => (
               <button
                 key={item.key}
                 className={`nav-item${active === item.key ? " active" : ""}`}
-                onClick={() => onNavigate(item.key)}
+                onClick={() => handleNavigate(item.key)}
               >
                 {NAV_ICONS[item.key]}
                 {item.label}
@@ -159,42 +202,110 @@ export default function Layout({ admin, active, onNavigate, onLogout, children }
 
           <div className="nav-section-label" style={{ marginTop: 10 }}>Config</div>
           <div className="nav">
-            {NAV_ITEMS.slice(13).map((item) => (
+            {NAV_ITEMS.slice(14).map((item) => (
               <button
                 key={item.key}
                 className={`nav-item${active === item.key ? " active" : ""}`}
-                onClick={() => onNavigate(item.key)}
+                onClick={() => handleNavigate(item.key)}
               >
                 {NAV_ICONS[item.key]}
                 {item.label}
               </button>
             ))}
-            <button
-              className={`nav-item${active === "policies" ? " active" : ""}`}
-              onClick={() => onNavigate("policies")}
-            >
-              {NAV_ICONS.policies}
-              About Us & Policies
-            </button>
           </div>
         </nav>
 
         <div className="sidebar-footer">
-          <button className="nav-item" onClick={onLogout} style={{ color: "#f87171", width: "100%" }}>
-            <svg className="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-            </svg>
-            Sign Out
-          </button>
+          <div style={{ position: "relative" }}>
+            {/* User info row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, marginBottom: 4, background: "var(--nav-hover, rgba(255,255,255,0.06))" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--sidebar-text, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{admin.email}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{admin.role}</div>
+              </div>
+              <button
+                onClick={() => setLogoutMenuOpen((o) => !o)}
+                title="Session options"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", borderRadius: 6, color: "var(--muted)", flexShrink: 0, display: "flex", alignItems: "center" }}
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Logout dropdown */}
+            {logoutMenuOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 49 }} onClick={() => setLogoutMenuOpen(false)} />
+                <div style={{
+                  position: "absolute", bottom: "100%", left: 0, right: 0, marginBottom: 4,
+                  background: "var(--panel, #fff)", border: "1px solid var(--border)", borderRadius: 10,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.18)", zIndex: 50, overflow: "hidden",
+                }}>
+                  <button
+                    onClick={() => { setLogoutMenuOpen(false); setMenuOpen(false); onLogout(); }}
+                    style={{ width: "100%", textAlign: "left", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text)", display: "flex", alignItems: "center", gap: 10 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-2, #f1f5f9)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style={{ color: "#f87171", flexShrink: 0 }}>
+                      <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Sign Out</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>This device only</div>
+                    </div>
+                  </button>
+                  <div style={{ height: 1, background: "var(--border)" }} />
+                  <button
+                    onClick={() => { setLogoutMenuOpen(false); setMenuOpen(false); onLogoutAll(); }}
+                    style={{ width: "100%", textAlign: "left", padding: "12px 16px", background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text)", display: "flex", alignItems: "center", gap: 10 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-2, #f1f5f9)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style={{ color: "#f87171", flexShrink: 0 }}>
+                      <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Sign Out All Devices</div>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>Revokes all active sessions</div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </aside>
 
       <main className="content">
         <div className="topbar">
           <div className="topbar-left">
+            <button className="hamburger-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+            </button>
             <div className="topbar-title">{getPageTitle(active)}</div>
           </div>
           <div className="topbar-right">
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? (
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                </svg>
+              )}
+            </button>
             <div className="user-badge">
               <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" style={{ color: "var(--muted)" }}>
                 <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />

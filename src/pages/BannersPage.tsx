@@ -9,6 +9,7 @@ type BannerRow = {
   imageUrl: string;
   linkUrl?: string;
   placement?: string;
+  platform?: "all" | "web" | "app";
   sortOrder?: number;
   displayDurationSeconds?: number;
   isActive?: boolean;
@@ -23,6 +24,7 @@ const emptyForm = {
   imageUrl: "",
   linkUrl: "",
   placement: "home",
+  platform: "all" as "all" | "web" | "app",
   sortOrder: "0",
   displayDurationSeconds: "5",
   isActive: true,
@@ -140,6 +142,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
         imageUrl: form.imageUrl.trim(),
         linkUrl: form.linkUrl.trim(),
         placement: form.placement,
+        platform: form.platform,
         sortOrder: Number(form.sortOrder) || 0,
         displayDurationSeconds: Number(form.displayDurationSeconds) || 5,
         isActive: form.isActive,
@@ -171,6 +174,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
       imageUrl: row.imageUrl || "",
       linkUrl: row.linkUrl || "",
       placement: row.placement || "home",
+      platform: row.platform || "all",
       sortOrder: String(row.sortOrder ?? 0),
       displayDurationSeconds: String(row.displayDurationSeconds ?? 5),
       isActive: row.isActive !== false,
@@ -239,6 +243,18 @@ export default function BannersPage({ api }: { api: ApiClient }) {
             onChange={(e) => setForm((current) => ({ ...current, placement: e.target.value }))}
             style={{ width: 140 }}
           />
+          <select
+            className="input"
+            value={form.platform}
+            onChange={(e) =>
+              setForm((current) => ({ ...current, platform: e.target.value as "all" | "web" | "app" }))
+            }
+            style={{ width: 150 }}
+          >
+            <option value="all">All (web + app)</option>
+            <option value="web">Web only</option>
+            <option value="app">App only</option>
+          </select>
           <input
             className="input"
             placeholder="Sort order"
@@ -330,6 +346,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
             <tr>
               <th>Preview</th>
               <th>Title</th>
+              <th>Platform</th>
               <th>Timing</th>
               <th>Order</th>
               <th>Duration</th>
@@ -346,6 +363,9 @@ export default function BannersPage({ api }: { api: ApiClient }) {
                 <td>
                   <div style={{ fontWeight: 700 }}>{row.title || "Untitled"}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{row.placement || "home"}</div>
+                </td>
+                <td>
+                  {row.platform === "web" ? "Web only" : row.platform === "app" ? "App only" : "All"}
                 </td>
                 <td>
                   <div className="muted" style={{ fontSize: 12 }}>
@@ -379,10 +399,10 @@ export default function BannersPage({ api }: { api: ApiClient }) {
 
       {cropModalInfo ? (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ backgroundColor: "#fff", padding: 24, borderRadius: 12, maxWidth: "90vw", maxHeight: "90vh", overflow: "auto", width: 600 }}>
+          <div style={{ backgroundColor: "var(--panel)", padding: 24, borderRadius: 12, maxWidth: "90vw", maxHeight: "90vh", overflow: "auto", width: 600 }}>
             <h3 style={{ marginTop: 0, marginBottom: 8 }}>Crop Banner Image</h3>
             <p className="muted" style={{ marginBottom: 16 }}>Drag the box to frame exactly what will be visible in the app.</p>
-            <div style={{ display: "flex", justifyContent: "center", backgroundColor: "#f1f3f7", padding: 20, borderRadius: 8, marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "center", backgroundColor: "var(--panel-alt)", padding: 20, borderRadius: 8, marginBottom: 20 }}>
               <ReactCrop crop={crop} onChange={c => setCrop(c)} aspect={cropModalInfo.aspect}>
                 <img
                   src={cropModalInfo.src}

@@ -1,21 +1,37 @@
 [build]
-  command   = "npm run build"
-  publish   = "dist"
+  command = "npm run build"
+  publish = "dist"
 
 [build.environment]
-  NODE_VERSION            = "18"
-  VITE_ADMIN_API_BASE_URL = "/api/v1/admin"
+  NODE_VERSION = "18"
+  VITE_ADMIN_API_BASE_URL = "https://api.quickqare.in/api/v1/admin"
 
-# Proxy /api/* to the backend — browser calls Netlify (HTTPS), Netlify calls backend (HTTP)
-# This avoids mixed-content and CORS issues entirely
+# SPA fallback: all non-file routes serve index.html so React handles routing.
 [[redirects]]
-  from   = "/api/*"
-  to     = "http://168.144.64.189:4000/api/:splat"
+  from = "/*"
+  to = "/index.html"
   status = 200
-  force  = true
 
-# SPA fallback — all other paths serve index.html so React Router handles routing
-[[redirects]]
-  from   = "/*"
-  to     = "/index.html"
-  status = 200
+# Security headers for every response.
+#
+# Content-Security-Policy notes (this is an ENFORCING policy — keep it in sync
+# with what the app actually loads):
+#   script-src  self + the sha256 of the inline theme-bootstrap script in
+#               index.html. If that inline script is ever edited, recompute the
+#               hash (base64 sha256 of the exact bytes between the <script> tags)
+#               or the theme bootstrap will be blocked.
+#   style-src   'unsafe-inline' is required by Leaflet (dynamic element styles)
+#               and React inline styles; fonts.googleapis.com serves the font CSS.
+#   font-src    fonts.gstatic.com serves the Inter woff2 files.
+#   img-src     https: covers OpenStreetMap tiles, Leaflet marker icons
+#               (unpkg / githubusercontent) and uploaded images.
+#   connect-src the admin API + its socket.io upgrade (live tracking).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-153tklE6SR6g2+xK7e6eNHp8eUBaI/IVVnh9fL/KvG0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.quickqare.in wss://api.quickqare.in"

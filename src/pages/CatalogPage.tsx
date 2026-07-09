@@ -5,12 +5,15 @@ type CatalogItem = {
   _id: string;
   name: string;
   priceInr: number;
+  unit: string;
   description: string;
   isActive: boolean;
   sortOrder: number;
 };
 
-const EMPTY_FORM = { name: "", priceInr: "", description: "", sortOrder: "0" };
+const UNITS = ["piece", "metre", "centimetre", "litre", "ml", "kg", "gram", "set", "pair", "roll", "pack", "hour"];
+
+const EMPTY_FORM = { name: "", priceInr: "", unit: "piece", description: "", sortOrder: "0" };
 
 export default function CatalogPage({ api }: { api: ApiClient }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -39,6 +42,7 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
     setForm({
       name: item.name,
       priceInr: String(item.priceInr),
+      unit: item.unit || "piece",
       description: item.description ?? "",
       sortOrder: String(item.sortOrder ?? 0),
     });
@@ -56,6 +60,7 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
     const body = {
       name,
       priceInr: price,
+      unit: form.unit || "piece",
       description: form.description.trim(),
       sortOrder: Number(form.sortOrder) || 0,
     };
@@ -112,6 +117,19 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
             />
           </div>
 
+          <div style={{ flex: "0 1 130px" }}>
+            <label className="label">Unit</label>
+            <select
+              className="input"
+              value={form.unit}
+              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+            >
+              {UNITS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ flex: "0 1 80px" }}>
             <label className="label">Sort Order</label>
             <input
@@ -164,6 +182,7 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
               <tr>
                 <th>Name</th>
                 <th>Price</th>
+                <th>Unit</th>
                 <th>Description</th>
                 <th>Sort</th>
                 <th>Status</th>
@@ -173,7 +192,7 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", color: "var(--muted)", padding: "32px 0" }}>
+                  <td colSpan={7} style={{ textAlign: "center", color: "var(--muted)", padding: "32px 0" }}>
                     No items yet. Add your first catalog item above — partners will see these when creating estimates.
                   </td>
                 </tr>
@@ -182,6 +201,7 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
                 <tr key={item._id}>
                   <td style={{ fontWeight: 600 }}>{item.name}</td>
                   <td style={{ fontWeight: 700 }}>₹{item.priceInr.toLocaleString("en-IN")}</td>
+                  <td style={{ color: "var(--muted)", fontSize: 13 }}>{item.unit || "piece"}</td>
                   <td style={{ color: "var(--muted)", fontSize: 13 }}>{item.description || "—"}</td>
                   <td style={{ color: "var(--muted)", fontSize: 13 }}>{item.sortOrder}</td>
                   <td>

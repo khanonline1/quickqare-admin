@@ -10,7 +10,15 @@ async function parseJson<T>(res: Response): Promise<ApiResponse<T>> {
   if (!text) {
     return { success: false, data: null as T, error: { code: "EMPTY", message: "Empty response" }, meta: {} };
   }
-  return JSON.parse(text) as ApiResponse<T>;
+  try {
+    return JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    // Non-JSON response — proxy error or backend unreachable
+    const hint = res.status === 502 || res.status === 503 || res.status === 504
+      ? `Backend unreachable (${res.status}). Check that port 4000 is open on the server.`
+      : `Unexpected response from server (HTTP ${res.status}).`;
+    return { success: false, data: null as T, error: { code: "PROXY_ERROR", message: hint }, meta: {} };
+  }
 }
 
 export function createAdminApi(getTokens: () => Tokens | null, setTokens: (tokens: Tokens | null) => void) {
@@ -22,7 +30,17 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
     }
     if (tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`;
 
-    const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    } catch {
+      return {
+        success: false,
+        data: null as T,
+        error: { code: "NETWORK_ERROR", message: "Cannot connect to backend. Make sure the backend is running on port 4000." },
+        meta: {},
+      };
+    }
 
     if (response.status === 401 && tokens?.refreshToken && !options.retry) {
       const refreshed = await fetch(`${API_BASE}/auth/refresh`, {
@@ -33,14 +51,135 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
 
       if (refreshed.ok) {
         const refreshJson = await parseJson<{ accessToken: string; refreshToken: string }>(refreshed);
-        if (refreshJson.success) {
+        if (refreshJson.success && refreshJson.data?.accessToken) {
           setTokens({ accessToken: refreshJson.data.accessToken, refreshToken: refreshJson.data.refreshToken });
           return request<T>(path, { ...options, retry: true });
         }
       }
+
+      // Refresh failed — the session is dead (expired/invalid refresh token, or
+      // tokens signed with a now-changed secret). Clear tokens so the app drops
+      // back to the login screen instead of getting stuck on "Unauthorized admin".
+      setTokens(null);
     }
 
     return parseJson<T>(response);
+  };
+
+  // Multipart upload. Kept separate from request() because it must NOT set a
+  // JSON Content-Type, but it mirrors request()'s 401 -> refresh -> retry so an
+  // expired admin token re-auths instead of failing opaquely (the upload route
+  // is now admin-authenticated). Named so it can retry itself after refresh.
+  const uploadFile = async <T,>(path: string, file: File, fieldName = "image", retry = false): Promise<T> => {
+    const tokens = getTokens();
+    const headers: Record<string, string> = {};
+    if (tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`;
+
+    const formData = new FormData();
+    formData.append(fieldName, file);
+
+    let response: Response;
+    try {
+      response = await fetch(`${BACKEND_BASE}${path}`, { method: "POST", headers, body: formData });
+    } catch {
+      throw new Error("Cannot connect to backend. Check your connection and that the server is running.");
+    }
+
+    if (response.status === 401 && tokens?.refreshToken && !retry) {
+      const refreshed = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+      });
+      if (refreshed.ok) {
+        const refreshJson = await parseJson<{ accessToken: string; refreshToken: string }>(refreshed);
+        if (refreshJson.success && refreshJson.data?.accessToken) {
+          setTokens({ accessToken: refreshJson.data.accessToken, refreshToken: refreshJson.data.refreshToken });
+          return uploadFile<T>(path, file, fieldName, true);
+        }
+      }
+      setTokens(null);
+    }
+
+    const text = await response.text();
+    let json: unknown = null;
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        // Non-JSON body (proxy 413/502/504, HTML error page) — surface the real
+        // cause instead of a raw "Unexpected token <" SyntaxError.
+        throw new Error(
+          response.status === 413
+            ? "Image too large (max 5MB)."
+            : response.status >= 502
+              ? `Backend unreachable (HTTP ${response.status}).`
+              : `Unexpected server response (HTTP ${response.status}).`,
+        );
+      }
+    }
+    if (!response.ok) {
+      const msg = (json as { message?: string; error?: { message?: string } } | null);
+      throw new Error(msg?.message || msg?.error?.message || `Upload failed (HTTP ${response.status}).`);
+    }
+    if (!json) throw new Error("Empty upload response");
+    return json as T;
+  };
+
+  // Multi-file variant of uploadFile — used for cake photo galleries. Same
+  // 401 -> refresh -> retry behaviour; field name matches upload.array("images").
+  const uploadFiles = async <T,>(path: string, files: File[], fieldName = "images", retry = false): Promise<T> => {
+    const tokens = getTokens();
+    const headers: Record<string, string> = {};
+    if (tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`;
+
+    const formData = new FormData();
+    for (const file of files) formData.append(fieldName, file);
+
+    let response: Response;
+    try {
+      response = await fetch(`${BACKEND_BASE}${path}`, { method: "POST", headers, body: formData });
+    } catch {
+      throw new Error("Cannot connect to backend. Check your connection and that the server is running.");
+    }
+
+    if (response.status === 401 && tokens?.refreshToken && !retry) {
+      const refreshed = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+      });
+      if (refreshed.ok) {
+        const refreshJson = await parseJson<{ accessToken: string; refreshToken: string }>(refreshed);
+        if (refreshJson.success && refreshJson.data?.accessToken) {
+          setTokens({ accessToken: refreshJson.data.accessToken, refreshToken: refreshJson.data.refreshToken });
+          return uploadFiles<T>(path, files, fieldName, true);
+        }
+      }
+      setTokens(null);
+    }
+
+    const text = await response.text();
+    let json: unknown = null;
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(
+          response.status === 413
+            ? "Images too large (max 5MB each)."
+            : response.status >= 502
+              ? `Backend unreachable (HTTP ${response.status}).`
+              : `Unexpected server response (HTTP ${response.status}).`,
+        );
+      }
+    }
+    if (!response.ok) {
+      const msg = (json as { message?: string; error?: { message?: string } } | null);
+      throw new Error(msg?.message || msg?.error?.message || `Upload failed (HTTP ${response.status}).`);
+    }
+    if (!json) throw new Error("Empty upload response");
+    return json as T;
   };
 
   return {
@@ -52,28 +191,8 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
     put: <T,>(path: string, body?: unknown) =>
       request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
     delete: <T,>(path: string) => request<T>(path, { method: "DELETE" }),
-    uploadFile: async <T,>(path: string, file: File, fieldName = "image"): Promise<T> => {
-      const tokens = getTokens();
-      const headers: Record<string, string> = {};
-      if (tokens?.accessToken) headers.Authorization = `Bearer ${tokens.accessToken}`;
-
-      const formData = new FormData();
-      formData.append(fieldName, file);
-
-      const response = await fetch(`${BACKEND_BASE}${path}`, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-
-      const text = await response.text();
-      if (!text) throw new Error("Empty upload response");
-      const json = JSON.parse(text) as T;
-      if (!response.ok) {
-        throw new Error((json as { message?: string }).message || "Upload failed");
-      }
-      return json;
-    },
+    uploadFile,
+    uploadFiles,
 
     // Complaints APIs
     getComplaints: (params?: Record<string, string>) => {
@@ -84,7 +203,7 @@ export function createAdminApi(getTokens: () => Tokens | null, setTokens: (token
     updateComplaintStatus: (id: string, data: { status: string; notes?: string }) =>
       request(`/complaints/${id}/status`, { method: "PATCH", body: JSON.stringify(data) }),
     resolveComplaint: (id: string, data: { resolution: string; refundAmount?: number; reServiceScheduled?: boolean }) =>
-      request(`/complaints/${id}/resolve`, { method: "PATCH", body: JSON.stringify(data) }),
+      request(`/complaints/${id}/resolution`, { method: "PATCH", body: JSON.stringify(data) }),
   };
 }
 
