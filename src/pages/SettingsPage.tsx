@@ -15,7 +15,7 @@ function ImageUploadField({
   const handleFile = async (file: File) => {
     setError(""); setUploading(true);
     try {
-      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload", file, "image");
+      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload?folder=settings", file, "image");
       if (result.success && result.imageUrl) onChange(result.imageUrl);
       else setError("Upload failed");
     } catch (e: unknown) {
@@ -134,6 +134,11 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [useLiveLocation, setUseLiveLocation] = useState(false);
   const [useH3Zones, setUseH3Zones] = useState(false);
   const [defaultBannerEnabled, setDefaultBannerEnabled] = useState(true);
+  const [homeIconAnimationEnabled, setHomeIconAnimationEnabled] = useState(true);
+  // Per-icon animation style — only consulted when the master toggle above is on
+  const [homeIconAnimation, setHomeIconAnimation] = useState<Record<string, string>>({
+    acRepair: "bob", plumbing: "bob", mehendi: "bob", electrician: "bob", celebration: "bob", offers: "bob",
+  });
   const [platformFeePercent, setPlatformFeePercent] = useState(0);
   const [platformFeeFlatInr, setPlatformFeeFlatInr] = useState(0);
   const [taxPercent, setTaxPercent] = useState(18);
@@ -168,6 +173,8 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [catShimmerCelebration, setCatShimmerCelebration] = useState(true);
   const [targetPlatform, setTargetPlatform] = useState<"both" | "app" | "web">("both");
   const [themeSaving, setThemeSaving] = useState(false);
+  const [iconsSaving, setIconsSaving] = useState(false);
+  const [iconsSaved, setIconsSaved] = useState(false);
 
   // Social links
   const [socialWhatsapp, setSocialWhatsapp] = useState("");
@@ -176,6 +183,10 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [socialTwitter, setSocialTwitter] = useState("");
   const [socialYoutube, setSocialYoutube] = useState("");
   const [socialSaving, setSocialSaving] = useState(false);
+
+  // Contact Us (web/app support page)
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   useEffect(() => {
     api.get<any>("/settings").then((res) => {
@@ -187,6 +198,19 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         setUseLiveLocation(Boolean(res.data.useLiveLocation));
         setUseH3Zones(Boolean(res.data.useH3Zones));
         setDefaultBannerEnabled(res.data.defaultBannerEnabled !== false);
+        setHomeIconAnimationEnabled(res.data.homeIconAnimationEnabled !== false);
+        const hia = res.data.homeIconAnimation || {};
+        // Legacy booleans (old on/off version) map to bob/none
+        const style = (v: unknown) =>
+          v === false ? "none" : ["none", "bob", "bounce", "tada"].includes(v as string) ? (v as string) : "bob";
+        setHomeIconAnimation({
+          acRepair:    style(hia.acRepair),
+          plumbing:    style(hia.plumbing),
+          mehendi:     style(hia.mehendi),
+          electrician: style(hia.electrician),
+          celebration: style(hia.celebration),
+          offers:      style(hia.offers),
+        });
         const pr = res.data.pricing || {};
         setPlatformFeePercent(Number(pr.platformFeePercent) || 0);
         setPlatformFeeFlatInr(Number(pr.platformFeeFlatInr) || 0);
@@ -226,6 +250,11 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           setSocialTwitter(sl.twitter || "");
           setSocialYoutube(sl.youtube || "");
         }
+        const ci = res.data.contactInfo;
+        if (ci) {
+          setContactEmail(ci.email || "");
+          setContactPhone(ci.phone || "");
+        }
       }
     }).finally(() => setLoading(false));
   }, [api]);
@@ -241,6 +270,8 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         useLiveLocation,
         useH3Zones,
         defaultBannerEnabled,
+        homeIconAnimationEnabled,
+        homeIconAnimation,
         pricing: {
           platformFeePercent: Number(platformFeePercent) || 0,
           platformFeeFlatInr: Number(platformFeeFlatInr) || 0,
@@ -289,6 +320,30 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
     } finally { setThemeSaving(false); }
   };
 
+  // Saves ONLY the category icons. The backend applies each homeTheme field
+  // independently (see admin settings route), so sending just categoryIcons —
+  // with no isActive or colors — updates the icons without activating the theme
+  // or touching the colours. This is why the icons have their own save button.
+  const saveCategoryIcons = async () => {
+    setIconsSaving(true);
+    setIconsSaved(false);
+    try {
+      await api.patch("/settings", {
+        homeTheme: {
+          categoryIcons: {
+            acRepair: catIconAcRepair, acRepairShimmer: catShimmerAcRepair,
+            plumbing: catIconPlumbing, plumbingShimmer: catShimmerPlumbing,
+            mehendi:  catIconMehendi,  mehendiShimmer:  catShimmerMehendi,
+            electrician: catIconElectrician, electricianShimmer: catShimmerElectrician,
+            celebration: catIconCelebration, celebrationShimmer: catShimmerCelebration,
+          },
+        },
+      });
+      setIconsSaved(true);
+      setTimeout(() => setIconsSaved(false), 2500);
+    } finally { setIconsSaving(false); }
+  };
+
   const saveSocialLinks = async () => {
     setSocialSaving(true);
     try {
@@ -300,17 +355,21 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           twitter: socialTwitter.trim(),
           youtube: socialYoutube.trim(),
         },
+        contactInfo: {
+          email: contactEmail.trim(),
+          phone: contactPhone.trim(),
+        },
       });
     } finally { setSocialSaving(false); }
   };
 
   const anyEmergencyActive = emergencyLockdown || bookingsDisabled || paymentsFreezed || payoutsFreezed;
-  const anySocialLinkSet = Boolean(socialWhatsapp || socialInstagram || socialFacebook || socialTwitter || socialYoutube);
+  const anySocialLinkSet = Boolean(socialWhatsapp || socialInstagram || socialFacebook || socialTwitter || socialYoutube || contactEmail || contactPhone);
 
   const TABS: { id: Tab; label: string; badge?: string }[] = [
     { id: "app",       label: "App Settings" },
     { id: "theme",     label: "Home Screen Theme", badge: themeActive ? "LIVE" : undefined },
-    { id: "social",    label: "Social Links", badge: anySocialLinkSet ? "SET" : undefined },
+    { id: "social",    label: "Contact & Social", badge: anySocialLinkSet ? "SET" : undefined },
     { id: "emergency", label: "Emergency Controls", badge: anyEmergencyActive ? "!" : undefined },
   ];
 
@@ -406,12 +465,62 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
               disabled={loading}
             />
             <SettingRow
-              label="Default Promo Banner (Web)"
-              description="Show an attractive built-in promo banner on the web home page when no custom banner is active. Turn off to hide the banner slot entirely until you add your own banner."
+              label="Default Promo Banner (Web + App)"
+              description="Show the built-in auto-sliding promo banner (5s rotation) on the web home page and the customer app home screen when no custom banner is active. Web rotates 3 branded slides; the app leads with the classic AC Summer Service banner, then the same 3 slides. A Home Theme (festival theme) overrides the slides in the app. Turn off to hide the banner slot entirely until you add your own banner."
               checked={defaultBannerEnabled}
               onChange={setDefaultBannerEnabled}
               disabled={loading}
             />
+            <SettingRow
+              label="Home Icon Animation (App + Web)"
+              description="Master switch: category icons on the customer home screen play a slide-up entrance, then keep their chosen effect looping while the customer stays on Home. Turn off to show all icons static. Pick each icon's effect below. Takes effect when the app/web next refreshes its config (foreground/poll)."
+              checked={homeIconAnimationEnabled}
+              onChange={setHomeIconAnimationEnabled}
+              disabled={loading}
+            />
+            {homeIconAnimationEnabled && (
+              <div style={{ marginLeft: 24, paddingLeft: 16, borderLeft: "2px solid var(--border)" }}>
+                {([
+                  ["acRepair",    "AC Repair"],
+                  ["plumbing",    "Plumbing"],
+                  ["mehendi",     "Mehendi"],
+                  ["electrician", "Electrician (web only)"],
+                  ["celebration", "Celebration"],
+                  ["offers",      "Offers (app only)"],
+                ] as const).map(([key, label]) => (
+                  <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", paddingRight: 16 }}>{label}</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {([
+                        ["none",   "None"],
+                        ["bob",    "Bob"],
+                        ["bounce", "Bounce"],
+                        ["tada",   "Tada"],
+                      ] as const).map(([value, name]) => {
+                        const active = homeIconAnimation[key] === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={loading}
+                            onClick={() => setHomeIconAnimation((prev) => ({ ...prev, [key]: value }))}
+                            style={{
+                              padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+                              border: `1.5px solid ${active ? "#0ea5e9" : "var(--border)"}`,
+                              background: active ? "#e0f2fe" : "var(--panel)",
+                              color: active ? "#0369a1" : "var(--muted)",
+                              fontWeight: 700, fontSize: 12,
+                            }}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 32, marginBottom: 16 }}>
@@ -650,6 +759,28 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                       </div>
                     ))}
                   </div>
+
+                  {/* Icons have their own save so an icon change doesn't require
+                      saving/activating the whole colour theme. */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={saveCategoryIcons}
+                      disabled={iconsSaving || loading}
+                      style={{ minWidth: 150 }}
+                    >
+                      {iconsSaving ? "Saving…" : "Save Icons"}
+                    </button>
+                    {iconsSaved && (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>
+                        ✓ Icons saved — live in app &amp; web
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, color: "var(--muted-2)" }}>
+                      Saves only the icons — won't change your colours or activate the theme.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -702,6 +833,39 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
       ══════════════════════════════════════════════════════════════════════ */}
       {tab === "social" && (
         <div style={{ maxWidth: 560 }}>
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Contact Us</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+              Shown on the "Contact Us" page in the web app. Leave a field blank to hide it there.
+            </p>
+          </div>
+
+          <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 600 }}>Support Email</label>
+              <input
+                className="input"
+                type="email"
+                placeholder="support@quickqare.in"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                disabled={loading}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 600 }}>Support Phone</label>
+              <input
+                className="input"
+                placeholder="+91 90000 00000"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                disabled={loading}
+                style={{ width: "100%" }}
+              />
+            </div>
+          </div>
+
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Social Media Links</h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
@@ -769,7 +933,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
 
           <div style={{ marginTop: 24 }}>
             <button className="button" onClick={saveSocialLinks} disabled={socialSaving || loading} style={{ minWidth: 180 }}>
-              {socialSaving ? "Saving…" : "Save Social Links"}
+              {socialSaving ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </div>

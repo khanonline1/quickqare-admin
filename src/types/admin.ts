@@ -21,4 +21,7 @@ export type ChallengeResponse = {
   devCode?: string;
 };
 
-export type NavItem = { key: string; label: string };
+// `permission`, when set, hides the nav item unless the signed-in admin's
+// permissions include it. The backend is the real gate; this just avoids
+// showing a control the API will reject.
+export type NavItem = { key: string; label: string; permission?: string };

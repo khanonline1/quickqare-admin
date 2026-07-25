@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { AdminUser, Tokens } from "./types/admin";
 import { createAdminApi } from "./api/adminApi";
+import { PERM_SYSTEM_RESET } from "./constants/nav";
 import { secureGet, secureRemove, secureSet } from "./api/secureStore";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import CustomersPage from "./pages/CustomersPage";
 import PartnersPage from "./pages/PartnersPage";
+import PartnerLeadsPage from "./pages/PartnerLeadsPage";
 import HelpersPage from "./pages/HelpersPage";
 import ServicesPage from "./pages/ServicesPage";
 import CatalogPage from "./pages/CatalogPage";
@@ -15,6 +17,7 @@ import PaymentsPage from "./pages/PaymentsPage";
 import AuditPage from "./pages/AuditPage";
 import DisputesPage from "./pages/DisputesPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import LearningPage from "./pages/LearningPage";
 import CouponsPage from "./pages/CouponsPage";
 import ZonesPage from "./pages/ZonesPage";
 import BannersPage from "./pages/BannersPage";
@@ -92,6 +95,7 @@ export default function App() {
       {active === "dashboard" && <DashboardPage api={api} />}
       {active === "customers" && <CustomersPage api={api} />}
       {active === "partners" && <PartnersPage api={api} />}
+      {active === "partner-leads" && <PartnerLeadsPage api={api} />}
       {active === "helpers" && <HelpersPage api={api} />}
       {active === "services" && <ServicesPage api={api} />}
       {active === "catalog" && <CatalogPage api={api} />}
@@ -113,6 +117,7 @@ export default function App() {
       {active === "audit" && <AuditPage api={api} />}
       {active === "disputes" && <DisputesPage api={api} />}
       {active === "analytics" && <AnalyticsPage api={api} />}
+      {active === "learning" && <LearningPage api={api} />}
       {active === "coupons" && <CouponsPage api={api} />}
       {active === "referrals" && <ReferralsPage api={api} />}
       {active === "live-tracking" && <LiveTrackingPage api={api} />}
@@ -123,7 +128,9 @@ export default function App() {
       {active === "roles" && <RolesPage api={api} />}
       {active === "settings" && <SettingsPage api={api} />}
       {active === "policies" && <PoliciesPage api={api} />}
-      {active === "test-reset" && <TestResetPage api={api} />}
+      {active === "test-reset" && admin.permissions.includes(PERM_SYSTEM_RESET) && (
+        <TestResetPage api={api} />
+      )}
     </Layout>
   );
 }

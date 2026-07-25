@@ -39,7 +39,7 @@ export default function NotificationsPage({ api }: { api: ApiClient }) {
     setError("");
     try {
       const response = await api.uploadFile<{ success: boolean; imageUrl: string; message?: string }>(
-        "/api/upload",
+        "/api/upload?folder=notifications",
         file
       );
       if (!response.success || !response.imageUrl) {

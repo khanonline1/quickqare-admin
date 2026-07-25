@@ -6,6 +6,7 @@ const POLICY_TYPES = [
   { key: "terms",          label: "Terms & Conditions",          group: "Customer" },
   { key: "privacy",        label: "Privacy Policy",              group: "Customer" },
   { key: "refund",         label: "Cancellation & Refund",       group: "Customer" },
+  { key: "anti_discrimination", label: "Anti-discrimination Policy", group: "Customer" },
   { key: "partner_terms",  label: "Partner Terms & Conditions",  group: "Partner"  },
   { key: "partner_privacy",label: "Partner Privacy Policy",      group: "Partner"  },
 ];
