@@ -721,6 +721,59 @@ label {
   border: 1px solid var(--border);
 }
 
+/* Clickable status pill (toggles active/disabled) */
+.tag-toggle {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  transition: box-shadow var(--transition), filter var(--transition);
+}
+
+.tag-toggle:hover {
+  box-shadow: var(--shadow-xs);
+  filter: brightness(0.96);
+}
+
+[data-theme="dark"] .tag-toggle:hover { filter: brightness(1.2); }
+
+/* === DROPDOWN MENU === */
+.menu {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 1100;
+  animation: fadeIn 120ms ease;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.menu-item:hover {
+  background: var(--panel-alt);
+  color: var(--text);
+}
+
 /* === TABLE === */
 .table-wrapper {
   overflow-x: auto;
