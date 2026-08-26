@@ -11,7 +11,10 @@ type CatalogItem = {
   sortOrder: number;
 };
 
-const UNITS = ["piece", "metre", "centimetre", "litre", "ml", "kg", "gram", "set", "pair", "roll", "pack", "hour"];
+// Length units include foot/inch because trade goods (copper pipe, wiring,
+// drain hose) are quoted in feet on-site — pricing them per metre forced the
+// partner to convert, and the estimate then billed the rounded conversion.
+const UNITS = ["piece", "metre", "centimetre", "foot", "inch", "litre", "ml", "kg", "gram", "set", "pair", "roll", "pack", "hour"];
 
 const EMPTY_FORM = { name: "", priceInr: "", unit: "piece", description: "", sortOrder: "0" };
 

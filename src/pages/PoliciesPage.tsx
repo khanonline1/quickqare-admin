@@ -6,6 +6,7 @@ const POLICY_TYPES = [
   { key: "terms",          label: "Terms & Conditions",          group: "Customer" },
   { key: "privacy",        label: "Privacy Policy",              group: "Customer" },
   { key: "refund",         label: "Cancellation & Refund",       group: "Customer" },
+  { key: "anti_discrimination", label: "Anti-discrimination Policy", group: "Customer" },
   { key: "partner_terms",  label: "Partner Terms & Conditions",  group: "Partner"  },
   { key: "partner_privacy",label: "Partner Privacy Policy",      group: "Partner"  },
 ];
@@ -38,7 +39,7 @@ export default function PoliciesPage({ api }: { api: ApiClient }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await api.put(`/policies/${activeTab}`, { content });
+      const res = await api.post(`/policies/${activeTab}`, { content });
       if (res.success) {
         alert("Policy updated successfully");
       } else {
