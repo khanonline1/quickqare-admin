@@ -23,7 +23,12 @@ type GstReport = {
   rows: GstRow[];
 };
 
-const toISODate = (date: Date) => date.toISOString().slice(0, 10);
+// The calendar date in India, which is what the report is grouped by.
+// toISOString() gives the UTC date: until 5:30 AM IST that is still
+// yesterday, so the default range used to stop a day short.
+// ("en-CA" formats as YYYY-MM-DD.)
+const toISODate = (date: Date) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(date);
 
 const csvEscape = (value: unknown) => {
   const text = value === null || value === undefined ? "" : String(value);

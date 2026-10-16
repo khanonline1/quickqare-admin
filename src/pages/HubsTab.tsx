@@ -358,14 +358,16 @@ export default function HubsTab({ api }: { api: ApiClient }) {
   const handleDelete = async (hub: Hub, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm(`Delete hub "${hub.name}"? Partners assigned to it will be unassigned.`)) return;
-    await api.delete(`/hubs/${hub._id}`);
+    const res = await api.delete(`/hubs/${hub._id}`);
+    if (!res.success) { alert(res.error?.message || "Failed to delete hub"); return; }
     await fetchHubs();
     if (editingHub?._id === hub._id) cancelDraw();
   };
 
   const quickToggle = async (hub: Hub, e: React.MouseEvent) => {
     e.stopPropagation();
-    await api.patch(`/hubs/${hub._id}`, { isActive: !hub.isActive });
+    const res = await api.patch(`/hubs/${hub._id}`, { isActive: !hub.isActive });
+    if (!res.success) { alert(res.error?.message || "Failed to update hub"); return; }
     await fetchHubs();
   };
 

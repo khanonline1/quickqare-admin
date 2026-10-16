@@ -69,8 +69,10 @@ export default function ComplaintDetailsPage({
       setLoading(true);
       setError(null);
       try {
+        // The api client returns { success: false } on a refusal — it doesn't throw.
         const res = (await api.getComplaint(complaintId)) as any;
-        setComplaint(res.data);
+        if (res.success) setComplaint(res.data);
+        else setError(res.error?.message || "Failed to load complaint details.");
       } catch {
         setError("Failed to load complaint details.");
       } finally {
@@ -81,11 +83,13 @@ export default function ComplaintDetailsPage({
 
   const updateStatus = async (newStatus: string) => {
     setSaving(true);
+    setError(null);
     try {
-      await api.updateComplaintStatus(complaintId, {
+      const res = await api.updateComplaintStatus(complaintId, {
         status: newStatus,
         notes: `Status updated to ${newStatus}`,
       });
+      if (!res.success) { setError(res.error?.message || "Failed to update status."); return; }
       setComplaint((prev) => (prev ? { ...prev, status: newStatus } : null));
     } catch {
       setError("Failed to update status.");
@@ -96,12 +100,16 @@ export default function ComplaintDetailsPage({
 
   const resolveComplaint = async () => {
     setSaving(true);
+    setError(null);
     try {
-      await api.resolveComplaint(complaintId, {
+      const res = await api.resolveComplaint(complaintId, {
         resolution,
         refundAmount: refundAmount ? parseFloat(refundAmount) : undefined,
         reServiceScheduled,
       });
+      // Close either way: the error banner sits on the page behind the modal.
+      setShowResolveModal(false);
+      if (!res.success) { setError(res.error?.message || "Failed to resolve complaint."); return; }
       setComplaint((prev) =>
         prev
           ? {
@@ -113,7 +121,6 @@ export default function ComplaintDetailsPage({
             }
           : null
       );
-      setShowResolveModal(false);
     } catch {
       setError("Failed to resolve complaint.");
     } finally {
@@ -142,6 +149,10 @@ export default function ComplaintDetailsPage({
   }
 
   const statusInfo = STATUS_TAG[complaint.status] || { cls: "tag", label: complaint.status };
+
+  // Only real web addresses are ever put in a link or an <img>: an older
+  // complaint could hold whatever text its sender chose.
+  const photos = (complaint.images || []).filter((url) => /^https?:\/\//i.test(url));
 
   return (
     <div className="complaint-details">
@@ -235,6 +246,35 @@ export default function ComplaintDetailsPage({
           </div>
           <p style={{ lineHeight: 1.65, color: "var(--text-2)" }}>{complaint.description}</p>
         </div>
+
+        {photos.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 8,
+              }}
+            >
+              Photos from the customer
+            </div>
+            <div className="row" style={{ gap: 10 }}>
+              {photos.map((url, i) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer">
+                  <img
+                    src={url}
+                    alt={`Complaint photo ${i + 1}`}
+                    loading="lazy"
+                    style={{ width: 120, height: 120, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border)" }}
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Resolution */}
@@ -368,6 +408,10 @@ export default function ComplaintDetailsPage({
                   value={refundAmount}
                   onChange={(e) => setRefundAmount(e.target.value)}
                 />
+                <div className="muted" style={{ fontSize: 12 }}>
+                  Recorded as a refund owed on this booking (never more than the customer paid). Finance pays it
+                  from Payments → Customer Refunds. It can't be changed once saved.
+                </div>
               </div>
 
               <label className="checkbox-row" style={{ cursor: "pointer" }}>

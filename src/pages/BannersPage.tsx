@@ -8,6 +8,7 @@ type BannerRow = {
   title?: string;
   imageUrl: string;
   linkUrl?: string;
+  serviceId?: string;
   placement?: string;
   platform?: "all" | "web" | "app";
   sortOrder?: number;
@@ -23,6 +24,7 @@ const emptyForm = {
   title: "",
   imageUrl: "",
   linkUrl: "",
+  serviceId: "",
   placement: "home",
   platform: "all" as "all" | "web" | "app",
   sortOrder: "0",
@@ -39,6 +41,14 @@ export default function BannersPage({ api }: { api: ApiClient }) {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
+  // Services for the "Target service" picker (same source as Coupons/Offers).
+  const [services, setServices] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get<any>("/services?limit=200").then((res) => {
+      if (res.success) setServices(Array.isArray(res.data) ? res.data : []);
+    });
+  }, [api]);
 
   // --- Cropper State ---
   const [cropModalInfo, setCropModalInfo] = useState<{
@@ -109,7 +119,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
   }, [fetchRows]);
 
   const uploadImage = async (file: File) => {
-    const response = await api.uploadFile<{ success: boolean; imageUrl: string; message?: string }>("/api/upload", file);
+    const response = await api.uploadFile<{ success: boolean; imageUrl: string; message?: string }>("/api/upload?folder=banners", file);
     if (!response.success || !response.imageUrl) {
       throw new Error(response.message || "Image upload failed");
     }
@@ -141,6 +151,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
         title: form.title.trim(),
         imageUrl: form.imageUrl.trim(),
         linkUrl: form.linkUrl.trim(),
+        serviceId: form.serviceId,
         placement: form.placement,
         platform: form.platform,
         sortOrder: Number(form.sortOrder) || 0,
@@ -173,6 +184,7 @@ export default function BannersPage({ api }: { api: ApiClient }) {
       title: row.title || "",
       imageUrl: row.imageUrl || "",
       linkUrl: row.linkUrl || "",
+      serviceId: row.serviceId || "",
       placement: row.placement || "home",
       platform: row.platform || "all",
       sortOrder: String(row.sortOrder ?? 0),
@@ -236,6 +248,20 @@ export default function BannersPage({ api }: { api: ApiClient }) {
             onChange={(e) => setForm((current) => ({ ...current, linkUrl: e.target.value }))}
             style={{ minWidth: 240, flex: "1 1 240px" }}
           />
+          <select
+            className="input"
+            title="Where tapping the banner takes the customer. When a service is chosen it opens that service in the app/web; Link URL is only used as a fallback (or for external pages)."
+            value={form.serviceId}
+            onChange={(e) => setForm((current) => ({ ...current, serviceId: e.target.value }))}
+            style={{ minWidth: 200 }}
+          >
+            <option value="">No target service (use Link URL)</option>
+            {services.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
           <input
             className="input"
             placeholder="Placement"
@@ -358,11 +384,18 @@ export default function BannersPage({ api }: { api: ApiClient }) {
             {rows.map((row) => (
               <tr key={row._id}>
                 <td>
-                  <img className="table-image-preview" src={row.imageUrl} alt={row.title || "banner"} />
+                  <img className="table-image-preview" src={row.imageUrl} alt={row.title || "banner"} loading="lazy" />
                 </td>
                 <td>
                   <div style={{ fontWeight: 700 }}>{row.title || "Untitled"}</div>
                   <div className="muted" style={{ fontSize: 12 }}>{row.placement || "home"}</div>
+                  {row.serviceId ? (
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      → {services.find((s) => s._id === row.serviceId)?.name || "service"}
+                    </div>
+                  ) : row.linkUrl ? (
+                    <div className="muted" style={{ fontSize: 12 }}>→ {row.linkUrl}</div>
+                  ) : null}
                 </td>
                 <td>
                   {row.platform === "web" ? "Web only" : row.platform === "app" ? "App only" : "All"}

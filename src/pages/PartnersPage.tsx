@@ -10,6 +10,7 @@ type PartnerRow = {
   id: string;
   name: string;
   phone: string;
+  gender: string;
   serviceCategory: string;
   skillTier: number;
   pincode: string;
@@ -72,6 +73,11 @@ const bookingStatusColor = (s: string) => {
   if (s === "ASSIGNED" || s === "PARTNER_ACCEPTED" || s === "CONFIRMED") return "#d97706";
   return "#6b7280";
 };
+
+// Women-only / men-only categories (Category.partnerGender) match on this, so
+// a missing value is worth surfacing: that partner can't take those jobs.
+const genderLabel = (g: string | undefined) =>
+  g === "FEMALE" ? "Female" : g === "MALE" ? "Male" : g === "OTHER" ? "Other" : "Gender not set";
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return "—";
@@ -281,6 +287,8 @@ function PartnerDetailPanel({
   const [selfieRejectReason, setSelfieRejectReason] = useState("");
   const [selfieShowRejectBox, setSelfieShowRejectBox] = useState(false);
   const [selfieError, setSelfieError] = useState("");
+  const [genderSaving, setGenderSaving] = useState(false);
+  const [tierSaving, setTierSaving] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -325,6 +333,35 @@ function PartnerDetailPanel({
     }
   };
 
+  const handleGenderChange = async (gender: string) => {
+    if (!gender) return;
+    setGenderSaving(true);
+    try {
+      const res = await api.patch<any>(`/partners/${partnerId}/gender`, { gender });
+      if (res.success) {
+        setData((prev) => prev ? { ...prev, partner: { ...prev.partner, gender } } : prev);
+      } else {
+        alert(res.error?.message || "Failed to update gender");
+      }
+    } finally {
+      setGenderSaving(false);
+    }
+  };
+
+  const handleSkillTierChange = async (skillTier: number) => {
+    setTierSaving(true);
+    try {
+      const res = await api.patch<any>(`/partners/${partnerId}/skill-tier`, { skillTier });
+      if (res.success) {
+        setData((prev) => prev ? { ...prev, partner: { ...prev.partner, skillTier } } : prev);
+      } else {
+        alert(res.error?.message || "Failed to update skill tier");
+      }
+    } finally {
+      setTierSaving(false);
+    }
+  };
+
   const fetchLocation = async () => {
     setLocationLoading(true);
     try {
@@ -337,6 +374,9 @@ function PartnerDetailPanel({
 
   const p = data?.partner;
   const s = data?.stats;
+  const partnerCats: string[] = (p?.serviceCategories || []).map((c: string) => String(c).toLowerCase());
+  const partnerIsAC = partnerCats.some((c) => /(^|[^a-z])ac([^a-z]|$)|air.?con/.test(c));
+  const partnerIsSalon = partnerCats.some((c) => /salon|hair studio|makeup|self.?care/.test(c));
 
   return (
     <>
@@ -430,10 +470,36 @@ function PartnerDetailPanel({
                   <div><span style={{ color: "var(--muted-2)" }}>Service Areas: </span>{p?.serviceAreas?.join(", ") || "—"}</div>
                   <div><span style={{ color: "var(--muted-2)" }}>Services: </span>{p?.serviceCategories?.join(", ") || "—"}</div>
                   <div>
-                    <span style={{ color: "var(--muted-2)" }}>AC Skill: </span>
-                    {(p?.serviceCategories || []).some((c: string) => String(c).toLowerCase().includes("ac"))
-                      ? (p?.skillTier === 2 ? "Technician" : "Non-Technician")
-                      : "—"}
+                    <span style={{ color: "var(--muted-2)" }}>Gender: </span>
+                    <select
+                      className="input"
+                      title="Women-only / men-only categories match partners on this"
+                      style={{ height: 24, fontSize: 12, padding: "0 4px", width: "auto" }}
+                      value={p?.gender || ""}
+                      disabled={genderSaving}
+                      onChange={(e) => handleGenderChange(e.target.value)}
+                    >
+                      <option value="" disabled>Not set</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="MALE">Male</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--muted-2)" }}>Skill Tier: </span>
+                    {partnerIsAC || partnerIsSalon ? (
+                      <select
+                        className="input"
+                        title="Tier-2 services are only assigned to tier-2 partners"
+                        style={{ height: 24, fontSize: 12, padding: "0 4px", width: "auto" }}
+                        value={p?.skillTier === 2 ? "2" : "1"}
+                        disabled={tierSaving}
+                        onChange={(e) => handleSkillTierChange(Number(e.target.value))}
+                      >
+                        <option value="1">{partnerIsAC ? "Non-Technician" : "Beautician"}</option>
+                        <option value="2">{partnerIsAC ? "Technician" : "Senior beautician"}</option>
+                      </select>
+                    ) : "—"}
                   </div>
                   <div><span style={{ color: "var(--muted-2)" }}>Subscription: </span>{p?.subscriptionActive ? "Active" : "Inactive"}</div>
                 </div>
@@ -779,6 +845,9 @@ function PartnerDetailPanel({
 export default function PartnersPage({ api }: { api: ApiClient }) {
   const [status, setStatus] = useState("PENDING");
   const [search, setSearch] = useState("");
+  // Applied on Enter / Search, not on every keystroke (see BookingsPage).
+  const [query, setQuery] = useState("");
+  const latestFetch = useRef(0);
   const [rows, setRows] = useState<PartnerRow[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({});
   const [commissionDraft, setCommissionDraft] = useState<Record<string, string>>({});
@@ -787,41 +856,65 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
   const fetchRows = useCallback(async (page = 1) => {
     const params = new URLSearchParams({ page: String(page) });
     if (status) params.set("status", status);
-    if (search.trim()) params.set("q", search.trim());
+    if (query) params.set("q", query);
+    const fetchId = ++latestFetch.current;
     const res = await api.get<any>(`/partners?${params.toString()}`);
+    if (fetchId !== latestFetch.current) return; // answer to an older filter
     if (res.success) {
       setRows(res.data);
       setMeta(res.meta);
     }
-  }, [api, status, search]);
+  }, [api, status, query]);
 
   useEffect(() => { fetchRows(1); }, [fetchRows]);
 
+  const applySearch = () => {
+    const next = search.trim();
+    if (next === query) fetchRows(1);
+    else setQuery(next);
+  };
+
   const updateApproval = async (id: string, next: string) => {
-    await api.patch(`/partners/${id}/approval`, { status: next });
+    const res = await api.patch(`/partners/${id}/approval`, { status: next });
+    if (!res.success) { alert(res.error?.message || "Failed to update partner"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
+  // KYC is manual for now: approving is what marks the partner's KYC as
+  // verified (verificationStatus → VERIFIED), so confirm the ID was checked.
+  const approvePartner = (id: string, name: string) => {
+    if (!window.confirm(`Approve ${name}? This also marks their KYC as verified — approve only after checking one government ID (Aadhaar, PAN, voter ID or driving licence).`)) {
+      return;
+    }
+    updateApproval(id, "APPROVED");
+  };
+
   const updateStatus = async (id: string, next: string) => {
-    await api.patch(`/partners/${id}/status`, { status: next });
+    const res = await api.patch(`/partners/${id}/status`, { status: next });
+    if (!res.success) { alert(res.error?.message || "Failed to update partner"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
   const updateCommission = async (id: string) => {
     const value = Number(commissionDraft[id]);
     if (!Number.isFinite(value)) return;
-    await api.patch(`/partners/${id}/commission`, { commissionPercent: value });
+    const res = await api.patch(`/partners/${id}/commission`, { commissionPercent: value });
+    if (!res.success) { alert(res.error?.message || "Failed to update commission"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
   const updateSubscription = async (id: string, subscriptionActive: boolean) => {
-    await api.patch(`/partners/${id}/subscription`, { subscriptionActive });
+    const res = await api.patch(`/partners/${id}/subscription`, { subscriptionActive });
+    if (!res.success) { alert(res.error?.message || "Failed to update subscription"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
+  // Delete keeps the partner's bookings, wallet and payout history: the account
+  // is anonymised and closed, and the phone number is freed. The server refuses
+  // while the partner still has wallet money or a pending withdrawal.
   const deletePartner = async (row: PartnerRow) => {
     const confirmed = window.confirm(
-      `Delete partner ${row.name || row.phone}?\n\nThis permanently removes the partner account. The same phone number can sign up again.`
+      `Delete partner ${row.name || row.phone}?\n\nThis closes the partner account for good. Their booking and wallet history is kept, and the same phone number can sign up again.`
     );
     if (!confirmed) return;
 
@@ -832,30 +925,16 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
       return;
     }
 
-    // If partner has active/historical bookings, offer two options
     if (res.error?.code === "PARTNER_HAS_ACTIVE_BOOKINGS") {
       const activeCount = (res.meta as any)?.activeBookings ?? "some";
       const choice = window.confirm(
         `This partner has ${activeCount} active booking(s).\n\n` +
-        `OK  → Unassign active bookings (send back to Searching) then delete partner.\n` +
-        `      Booking history is preserved.\n\n` +
+        `OK  → Unassign active bookings (send back to Searching) then delete partner.\n\n` +
         `Cancel → Abort.`
       );
       if (!choice) return;
 
-      // Ask a second time if they also want to wipe the full booking history
-      const wipeHistory = window.confirm(
-        `Also delete all booking history for this partner?\n\n` +
-        `OK     → YES — wipe all bookings, ratings, complaints, wallet history\n` +
-        `           (use this for test accounts)\n\n` +
-        `Cancel → NO  — keep booking history, only delete the partner account`
-      );
-
-      const url = wipeHistory
-        ? `/partners/${row.id}?cascade=true`
-        : `/partners/${row.id}?force=true`;
-
-      const forceRes = await api.delete(url);
+      const forceRes = await api.delete(`/partners/${row.id}?force=true`);
       if (!forceRes.success) {
         alert(forceRes.error?.message || "Delete failed");
         return;
@@ -880,7 +959,7 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
               placeholder="Search by name, phone or email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && fetchRows(1)}
+              onKeyDown={(e) => e.key === "Enter" && applySearch()}
             />
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">All Partners</option>
@@ -889,9 +968,9 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
               <option value="REJECTED">Rejected</option>
               <option value="BLOCKED">Blocked</option>
             </select>
-            <button className="button" onClick={() => fetchRows(1)}>Search</button>
-            {(search || status) && (
-              <button className="button secondary" onClick={() => { setSearch(""); setStatus(""); }}>Clear</button>
+            <button className="button" onClick={applySearch}>Search</button>
+            {(search || query || status) && (
+              <button className="button secondary" onClick={() => { setSearch(""); setQuery(""); setStatus(""); }}>Clear</button>
             )}
           </div>
         </div>
@@ -935,6 +1014,9 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
                       {" · "}{row.skillTier === 2 ? "Technician" : "Non-Technician"}
                     </span>
                   )}
+                  <span style={{ color: row.gender ? "var(--muted)" : "#d97706", fontSize: 12 }}>
+                    {" · "}{genderLabel(row.gender)}
+                  </span>
                 </td>
                 <td>{row.pincode || "—"}</td>
                 <td>
@@ -984,7 +1066,7 @@ export default function PartnersPage({ api }: { api: ApiClient }) {
                 </td>
                 <td>
                   <div className="row" style={{ gap: 4 }}>
-                    <button className="button success" style={{ fontSize: 11 }} onClick={() => updateApproval(row.id, "APPROVED")}>Approve</button>
+                    <button className="button success" style={{ fontSize: 11 }} title="Approving also marks the partner's KYC as verified" onClick={() => approvePartner(row.id, row.name)}>Approve</button>
                     <button className="button warning" style={{ fontSize: 11 }} onClick={() => updateApproval(row.id, "REJECTED")}>Reject</button>
                     <button className="button danger" style={{ fontSize: 11 }} onClick={() => updateStatus(row.id, "BLOCKED")}>Block</button>
                     <button

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 import type { AdminUser, ChallengeResponse, Tokens } from "../types/admin";
 import { sanitize } from "../utils/format";
+import { canCoordinateRefresh } from "../api/tokenStore";
 
 type LoginProps = { api: ApiClient; onAuth: (tokens: Tokens, admin: AdminUser) => void };
 
@@ -42,7 +43,13 @@ export default function LoginPage({ api, onAuth }: LoginProps) {
     try {
       const res = await api.post<{ accessToken: string; refreshToken: string; admin: AdminUser }>(
         "/auth/verify-2fa",
-        { challengeToken: challenge.challengeToken, code: sanitize(code) }
+        {
+          challengeToken: challenge.challengeToken,
+          code: sanitize(code),
+          // Tells the backend this panel keeps all its tabs on one refresh
+          // token, so a replayed old one can be treated as a stolen copy.
+          refreshCoordinated: canCoordinateRefresh(),
+        }
       );
       if (!res.success) {
         setError(res.error?.message || "2FA verification failed.");

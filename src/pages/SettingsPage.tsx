@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 
 // ── Image upload picker ───────────────────────────────────────────────────────
 function ImageUploadField({
-  label, hint, value, onChange, api, shimmer,
+  label, hint, value, onChange, api, shimmer, mediaType = "icon",
 }: {
   label: string; hint?: string; value: string;
-  onChange: (url: string) => void; api: ApiClient; shimmer?: boolean;
+  onChange: (url: string) => void; api: ApiClient; shimmer?: boolean; mediaType?: "icon" | "photo";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -15,7 +15,7 @@ function ImageUploadField({
   const handleFile = async (file: File) => {
     setError(""); setUploading(true);
     try {
-      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload", file, "image");
+      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload?folder=settings", file, "image");
       if (result.success && result.imageUrl) onChange(result.imageUrl);
       else setError("Upload failed");
     } catch (e: unknown) {
@@ -46,18 +46,18 @@ function ImageUploadField({
           {value ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <button type="button" className="button" style={{ fontSize: 12, padding: "6px 14px" }} disabled={uploading} onClick={() => inputRef.current?.click()}>
-                {uploading ? "Uploading…" : "Replace Image"}
+                {uploading ? "Uploading…" : `Replace ${mediaType === "photo" ? "Photo" : "Image"}`}
               </button>
               <button type="button" style={{ fontSize: 11, color: "var(--muted)", background: "none", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", padding: "5px 10px" }} onClick={() => onChange("")}>
-                Use Default Icon
+                {mediaType === "photo" ? "Use Default Artwork" : "Use Default Icon"}
               </button>
             </div>
           ) : (
             <div>
               <button type="button" className="button" style={{ fontSize: 12, padding: "6px 14px" }} disabled={uploading} onClick={() => inputRef.current?.click()}>
-                {uploading ? "Uploading…" : "Upload Custom Icon"}
+                {uploading ? "Uploading…" : `Upload Custom ${mediaType === "photo" ? "Photo" : "Icon"}`}
               </button>
-              <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 5 }}>Using built-in icon</div>
+              <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 5 }}>{mediaType === "photo" ? "Using default artwork" : "Using built-in icon"}</div>
             </div>
           )}
           {error && <div style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>{error}</div>}
@@ -134,6 +134,11 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [useLiveLocation, setUseLiveLocation] = useState(false);
   const [useH3Zones, setUseH3Zones] = useState(false);
   const [defaultBannerEnabled, setDefaultBannerEnabled] = useState(true);
+  const [homeIconAnimationEnabled, setHomeIconAnimationEnabled] = useState(true);
+  // Per-icon animation style — only consulted when the master toggle above is on
+  const [homeIconAnimation, setHomeIconAnimation] = useState<Record<string, string>>({
+    acRepair: "bob", plumbing: "bob", mehendi: "bob", electrician: "bob", beauty: "bob", offers: "bob",
+  });
   const [platformFeePercent, setPlatformFeePercent] = useState(0);
   const [platformFeeFlatInr, setPlatformFeeFlatInr] = useState(0);
   const [taxPercent, setTaxPercent] = useState(18);
@@ -160,14 +165,16 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [catIconPlumbing,     setCatIconPlumbing]     = useState("");
   const [catIconMehendi,      setCatIconMehendi]      = useState("");
   const [catIconElectrician,  setCatIconElectrician]  = useState("");
-  const [catIconCelebration,  setCatIconCelebration]  = useState("");
+  const [catIconBeauty,       setCatIconBeauty]       = useState("");
+  const [catIconWomenSalon,   setCatIconWomenSalon]   = useState("");
   const [catShimmerAcRepair,    setCatShimmerAcRepair]    = useState(true);
   const [catShimmerPlumbing,    setCatShimmerPlumbing]    = useState(true);
   const [catShimmerMehendi,     setCatShimmerMehendi]     = useState(true);
   const [catShimmerElectrician, setCatShimmerElectrician] = useState(true);
-  const [catShimmerCelebration, setCatShimmerCelebration] = useState(true);
   const [targetPlatform, setTargetPlatform] = useState<"both" | "app" | "web">("both");
   const [themeSaving, setThemeSaving] = useState(false);
+  const [iconsSaving, setIconsSaving] = useState(false);
+  const [iconsSaved, setIconsSaved] = useState(false);
 
   // Social links
   const [socialWhatsapp, setSocialWhatsapp] = useState("");
@@ -177,7 +184,18 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [socialYoutube, setSocialYoutube] = useState("");
   const [socialSaving, setSocialSaving] = useState(false);
 
-  useEffect(() => {
+  // Contact Us (web/app support page)
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+
+  // Set when the settings couldn't be loaded. The form then stays locked
+  // (`loading` is left on): it is showing built-in defaults, and saving those
+  // would overwrite the real fees, switches and theme.
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadSettings = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     api.get<any>("/settings").then((res) => {
       if (res.success) {
         setPartnerSubscriptionRequired(Boolean(res.data.partnerSubscriptionRequired));
@@ -187,6 +205,19 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         setUseLiveLocation(Boolean(res.data.useLiveLocation));
         setUseH3Zones(Boolean(res.data.useH3Zones));
         setDefaultBannerEnabled(res.data.defaultBannerEnabled !== false);
+        setHomeIconAnimationEnabled(res.data.homeIconAnimationEnabled !== false);
+        const hia = res.data.homeIconAnimation || {};
+        // Legacy booleans (old on/off version) map to bob/none
+        const style = (v: unknown) =>
+          v === false ? "none" : ["none", "bob", "bounce", "tada"].includes(v as string) ? (v as string) : "bob";
+        setHomeIconAnimation({
+          acRepair:    style(hia.acRepair),
+          plumbing:    style(hia.plumbing),
+          mehendi:     style(hia.mehendi),
+          electrician: style(hia.electrician),
+          beauty:      style(hia.beauty),
+          offers:      style(hia.offers),
+        });
         const pr = res.data.pricing || {};
         setPlatformFeePercent(Number(pr.platformFeePercent) || 0);
         setPlatformFeeFlatInr(Number(pr.platformFeeFlatInr) || 0);
@@ -211,12 +242,12 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           setCatIconPlumbing(ht.categoryIcons?.plumbing       ?? "");
           setCatIconMehendi(ht.categoryIcons?.mehendi         ?? "");
           setCatIconElectrician(ht.categoryIcons?.electrician ?? "");
-          setCatIconCelebration(ht.categoryIcons?.celebration ?? "");
+          setCatIconBeauty(ht.categoryIcons?.beauty           ?? "");
+          setCatIconWomenSalon(ht.categoryIcons?.womenSalon ?? "");
           setCatShimmerAcRepair(ht.categoryIcons?.acRepairShimmer    !== false);
           setCatShimmerPlumbing(ht.categoryIcons?.plumbingShimmer    !== false);
           setCatShimmerMehendi(ht.categoryIcons?.mehendiShimmer      !== false);
           setCatShimmerElectrician(ht.categoryIcons?.electricianShimmer !== false);
-          setCatShimmerCelebration(ht.categoryIcons?.celebrationShimmer !== false);
         }
         const sl = res.data.socialLinks;
         if (sl) {
@@ -226,14 +257,30 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           setSocialTwitter(sl.twitter || "");
           setSocialYoutube(sl.youtube || "");
         }
+        const ci = res.data.contactInfo;
+        if (ci) {
+          setContactEmail(ci.email || "");
+          setContactPhone(ci.phone || "");
+        }
+        setLoading(false);
+      } else {
+        setLoadError(res.error?.message || "Couldn't load the settings.");
       }
-    }).finally(() => setLoading(false));
+    });
   }, [api]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  // The emergency switches stay usable even when the load failed: each one
+  // sends only its own flag, and they matter most when something is wrong.
+  const emergencyLocked = emergencySaving || (loading && !loadError);
 
   const saveAppSettings = async () => {
     setAppSaving(true);
     try {
-      await api.patch("/settings", {
+      const res = await api.patch("/settings", {
         partnerSubscriptionRequired,
         partnerVerificationRequired,
         partnerSelfieRequired,
@@ -241,12 +288,15 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         useLiveLocation,
         useH3Zones,
         defaultBannerEnabled,
+        homeIconAnimationEnabled,
+        homeIconAnimation,
         pricing: {
           platformFeePercent: Number(platformFeePercent) || 0,
           platformFeeFlatInr: Number(platformFeeFlatInr) || 0,
           taxPercent:         Number(taxPercent)         || 0,
         },
       });
+      if (!res.success) alert(res.error?.message || "Failed to save settings");
     } finally { setAppSaving(false); }
   };
 
@@ -273,7 +323,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const saveTheme = async () => {
     setThemeSaving(true);
     try {
-      await api.patch("/settings", {
+      const res = await api.patch("/settings", {
         homeTheme: {
           isActive: themeActive, targetPlatform, themeName, primaryColor, accentColor,
           backgroundColor: bgColor, promoTagBadge, promoTagline, promoCta, promoIconUrl,
@@ -282,17 +332,45 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
             plumbing: catIconPlumbing, plumbingShimmer: catShimmerPlumbing,
             mehendi:  catIconMehendi,  mehendiShimmer:  catShimmerMehendi,
             electrician: catIconElectrician, electricianShimmer: catShimmerElectrician,
-            celebration: catIconCelebration, celebrationShimmer: catShimmerCelebration,
+            beauty: catIconBeauty,
+            womenSalon: catIconWomenSalon,
           },
         },
       });
+      if (!res.success) alert(res.error?.message || "Failed to save theme");
     } finally { setThemeSaving(false); }
+  };
+
+  // Saves ONLY the category icons. The backend applies each homeTheme field
+  // independently (see admin settings route), so sending just categoryIcons —
+  // with no isActive or colors — updates the icons without activating the theme
+  // or touching the colours. This is why the icons have their own save button.
+  const saveCategoryIcons = async () => {
+    setIconsSaving(true);
+    setIconsSaved(false);
+    try {
+      const res = await api.patch("/settings", {
+        homeTheme: {
+          categoryIcons: {
+            acRepair: catIconAcRepair, acRepairShimmer: catShimmerAcRepair,
+            plumbing: catIconPlumbing, plumbingShimmer: catShimmerPlumbing,
+            mehendi:  catIconMehendi,  mehendiShimmer:  catShimmerMehendi,
+            electrician: catIconElectrician, electricianShimmer: catShimmerElectrician,
+            beauty: catIconBeauty,
+            womenSalon: catIconWomenSalon,
+          },
+        },
+      });
+      if (!res.success) { alert(res.error?.message || "Failed to save icons"); return; }
+      setIconsSaved(true);
+      setTimeout(() => setIconsSaved(false), 2500);
+    } finally { setIconsSaving(false); }
   };
 
   const saveSocialLinks = async () => {
     setSocialSaving(true);
     try {
-      await api.patch("/settings", {
+      const res = await api.patch("/settings", {
         socialLinks: {
           whatsapp: socialWhatsapp.trim(),
           instagram: socialInstagram.trim(),
@@ -300,17 +378,22 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           twitter: socialTwitter.trim(),
           youtube: socialYoutube.trim(),
         },
+        contactInfo: {
+          email: contactEmail.trim(),
+          phone: contactPhone.trim(),
+        },
       });
+      if (!res.success) alert(res.error?.message || "Failed to save links");
     } finally { setSocialSaving(false); }
   };
 
   const anyEmergencyActive = emergencyLockdown || bookingsDisabled || paymentsFreezed || payoutsFreezed;
-  const anySocialLinkSet = Boolean(socialWhatsapp || socialInstagram || socialFacebook || socialTwitter || socialYoutube);
+  const anySocialLinkSet = Boolean(socialWhatsapp || socialInstagram || socialFacebook || socialTwitter || socialYoutube || contactEmail || contactPhone);
 
   const TABS: { id: Tab; label: string; badge?: string }[] = [
     { id: "app",       label: "App Settings" },
     { id: "theme",     label: "Home Screen Theme", badge: themeActive ? "LIVE" : undefined },
-    { id: "social",    label: "Social Links", badge: anySocialLinkSet ? "SET" : undefined },
+    { id: "social",    label: "Contact & Social", badge: anySocialLinkSet ? "SET" : undefined },
     { id: "emergency", label: "Emergency Controls", badge: anyEmergencyActive ? "!" : undefined },
   ];
 
@@ -329,6 +412,13 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         <h2 style={{ margin: "0 0 2px 0", fontSize: 22, fontWeight: 800 }}>Settings</h2>
         <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Manage platform configuration, appearance, and safety controls.</p>
       </div>
+
+      {loadError && (
+        <div className="error-banner" style={{ marginTop: 16 }}>
+          {loadError} What you see below are defaults, not your saved settings, so saving is switched off.
+          <button className="button secondary" style={{ marginLeft: 12, fontSize: 12 }} onClick={loadSettings}>Retry</button>
+        </div>
+      )}
 
       {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginTop: 24, marginBottom: 28, gap: 4 }}>
@@ -406,12 +496,62 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
               disabled={loading}
             />
             <SettingRow
-              label="Default Promo Banner (Web)"
-              description="Show an attractive built-in promo banner on the web home page when no custom banner is active. Turn off to hide the banner slot entirely until you add your own banner."
+              label="Default Promo Banner (Web + App)"
+              description="Show the built-in auto-sliding promo banner (5s rotation) on the web home page and the customer app home screen when no custom banner is active. Web rotates 3 branded slides; the app leads with the classic AC Summer Service banner, then the same 3 slides. A Home Theme (festival theme) overrides the slides in the app. Turn off to hide the banner slot entirely until you add your own banner."
               checked={defaultBannerEnabled}
               onChange={setDefaultBannerEnabled}
               disabled={loading}
             />
+            <SettingRow
+              label="Home Icon Animation (App + Web)"
+              description="Master switch: category icons on the customer home screen play a slide-up entrance, then keep their chosen effect looping while the customer stays on Home. Turn off to show all icons static. Pick each icon's effect below. Takes effect when the app/web next refreshes its config (foreground/poll)."
+              checked={homeIconAnimationEnabled}
+              onChange={setHomeIconAnimationEnabled}
+              disabled={loading}
+            />
+            {homeIconAnimationEnabled && (
+              <div style={{ marginLeft: 24, paddingLeft: 16, borderLeft: "2px solid var(--border)" }}>
+                {([
+                  ["acRepair",    "AC Repair"],
+                  ["plumbing",    "Plumbing"],
+                  ["mehendi",     "Mehendi"],
+                  ["electrician", "Electrician (web only)"],
+                  ["beauty",      "Beauty"],
+                  ["offers",      "Offers (app only)"],
+                ] as const).map(([key, label]) => (
+                  <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", paddingRight: 16 }}>{label}</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {([
+                        ["none",   "None"],
+                        ["bob",    "Bob"],
+                        ["bounce", "Bounce"],
+                        ["tada",   "Tada"],
+                      ] as const).map(([value, name]) => {
+                        const active = homeIconAnimation[key] === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            disabled={loading}
+                            onClick={() => setHomeIconAnimation((prev) => ({ ...prev, [key]: value }))}
+                            style={{
+                              padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+                              border: `1.5px solid ${active ? "#0ea5e9" : "var(--border)"}`,
+                              background: active ? "#e0f2fe" : "var(--panel)",
+                              color: active ? "#0369a1" : "var(--muted)",
+                              fontWeight: 700, fontSize: 12,
+                            }}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div style={{ marginTop: 32, marginBottom: 16 }}>
@@ -630,25 +770,48 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                 {/* Category icons */}
                 <div>
                   <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 10 }}>
-                    Category Icons <span style={{ color: "var(--muted-2)" }}>("What do you need?" row)</span>
+                     Category Icons &amp; Home Tile Images <span style={{ color: "var(--muted-2)" }}>("What do you need?" row)</span>
                   </label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                     {([
-                      { label: "AC Repair",   value: catIconAcRepair,    onChange: setCatIconAcRepair,    shimmer: catShimmerAcRepair,    onShimmer: setCatShimmerAcRepair },
-                      { label: "Plumbing",    value: catIconPlumbing,    onChange: setCatIconPlumbing,    shimmer: catShimmerPlumbing,    onShimmer: setCatShimmerPlumbing },
-                      { label: "Mehendi",     value: catIconMehendi,     onChange: setCatIconMehendi,     shimmer: catShimmerMehendi,     onShimmer: setCatShimmerMehendi },
-                      { label: "Electrician", value: catIconElectrician, onChange: setCatIconElectrician, shimmer: catShimmerElectrician, onShimmer: setCatShimmerElectrician },
-                      { label: "Celebration", value: catIconCelebration, onChange: setCatIconCelebration, shimmer: catShimmerCelebration, onShimmer: setCatShimmerCelebration },
+                      { label: "AC Repair",   value: catIconAcRepair,    onChange: setCatIconAcRepair,    shimmer: catShimmerAcRepair,    onShimmer: setCatShimmerAcRepair,    mediaType: "icon" as const },
+                      { label: "Plumbing",    value: catIconPlumbing,    onChange: setCatIconPlumbing,    shimmer: catShimmerPlumbing,    onShimmer: setCatShimmerPlumbing,    mediaType: "icon" as const },
+                      { label: "Mehendi",     value: catIconMehendi,     onChange: setCatIconMehendi,     shimmer: catShimmerMehendi,     onShimmer: setCatShimmerMehendi,     mediaType: "icon" as const },
+                      { label: "Electrician", value: catIconElectrician, onChange: setCatIconElectrician, shimmer: catShimmerElectrician, onShimmer: setCatShimmerElectrician, mediaType: "icon" as const },
+                      { label: "Beauty",      value: catIconBeauty,      onChange: setCatIconBeauty,      shimmer: undefined,             onShimmer: undefined,                mediaType: "icon" as const },
+                      { label: "Women’s Salon & Self-Care", value: catIconWomenSalon, onChange: setCatIconWomenSalon, shimmer: undefined, onShimmer: undefined, mediaType: "photo" as const },
                     ] as const).map((cat) => (
                       <div key={cat.label}>
-                        <ImageUploadField label={cat.label} value={cat.value} onChange={cat.onChange} api={api} shimmer={cat.shimmer} />
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <ImageUploadField label={cat.label} value={cat.value} onChange={cat.onChange} api={api} shimmer={cat.shimmer} mediaType={cat.mediaType} />
+                        {cat.onShimmer && <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                           <span style={{ fontSize: 11, color: "var(--muted)" }}>Shimmer</span>
                           <Toggle checked={cat.shimmer} onChange={cat.onShimmer} color="#6366f1" />
                           <span style={{ fontSize: 11, fontWeight: 600, color: cat.shimmer ? "#6366f1" : "var(--muted-2)" }}>{cat.shimmer ? "On" : "Off"}</span>
-                        </div>
+                        </div>}
                       </div>
                     ))}
+                  </div>
+
+                  {/* Icons have their own save so an icon change doesn't require
+                      saving/activating the whole colour theme. */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={saveCategoryIcons}
+                      disabled={iconsSaving || loading}
+                      style={{ minWidth: 150 }}
+                    >
+                      {iconsSaving ? "Saving…" : "Save Icons"}
+                    </button>
+                    {iconsSaved && (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>
+                        ✓ Icons saved — live in app &amp; web
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, color: "var(--muted-2)" }}>
+                      Saves only the icons — won't change your colours or activate the theme.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -702,6 +865,39 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
       ══════════════════════════════════════════════════════════════════════ */}
       {tab === "social" && (
         <div style={{ maxWidth: 560 }}>
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Contact Us</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+              Shown on the "Contact Us" page in the web app. Leave a field blank to hide it there.
+            </p>
+          </div>
+
+          <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 600 }}>Support Email</label>
+              <input
+                className="input"
+                type="email"
+                placeholder="support@quickqare.in"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                disabled={loading}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4, fontWeight: 600 }}>Support Phone</label>
+              <input
+                className="input"
+                placeholder="+91 90000 00000"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                disabled={loading}
+                style={{ width: "100%" }}
+              />
+            </div>
+          </div>
+
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Social Media Links</h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
@@ -769,7 +965,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
 
           <div style={{ marginTop: 24 }}>
             <button className="button" onClick={saveSocialLinks} disabled={socialSaving || loading} style={{ minWidth: 180 }}>
-              {socialSaving ? "Saving…" : "Save Social Links"}
+              {socialSaving ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </div>
@@ -817,7 +1013,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
               </div>
               <button
                 type="button"
-                disabled={emergencySaving || loading}
+                disabled={emergencyLocked}
                 onClick={() => {
                   const action = emergencyLockdown ? "DEACTIVATE" : "ACTIVATE";
                   const confirmed = window.confirm(
@@ -839,8 +1035,8 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                   border: "2px solid #dc2626",
                   background: emergencyLockdown ? "#dc2626" : "transparent",
                   color: emergencyLockdown ? "#fff" : "#dc2626",
-                  cursor: emergencySaving || loading ? "not-allowed" : "pointer",
-                  opacity: emergencySaving || loading ? 0.6 : 1,
+                  cursor: emergencyLocked ? "not-allowed" : "pointer",
+                  opacity: emergencyLocked ? 0.6 : 1,
                   transition: "all 0.2s",
                   whiteSpace: "nowrap",
                 }}
@@ -915,7 +1111,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                   <Toggle
                     checked={ctrl.active}
                     color="#f59e0b"
-                    disabled={emergencySaving || loading || emergencyLockdown}
+                    disabled={emergencyLocked || emergencyLockdown}
                     onChange={(next) => {
                       const action = next ? "enable" : "disable";
                       const confirmed = window.confirm(

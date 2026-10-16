@@ -390,13 +390,15 @@ export default function ZonesPage({ api }: { api: ApiClient }) {
   };
 
   const quickPatch = async (id: string, patch: Record<string, unknown>) => {
-    await api.patch(`/zones/${id}`, patch);
+    const res = await api.patch(`/zones/${id}`, patch);
+    if (!res.success) { alert(res.error?.message || "Failed to update zone"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
   const deleteZone = async (id: string) => {
     if (!window.confirm("Delete this zone? Pincodes it covers will become unserviceable.")) return;
-    await api.delete(`/zones/${id}`);
+    const res = await api.delete(`/zones/${id}`);
+    if (!res.success) { alert(res.error?.message || "Failed to delete zone"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 

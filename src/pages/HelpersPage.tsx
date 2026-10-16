@@ -17,7 +17,7 @@ type Relationship = {
   removedAt?: string;
 };
 
-type Technician = { id: string; name: string; phone: string; skillTier: number };
+type Technician = { id: string; name: string; phone: string; skillTier: number; serviceCategory?: string };
 
 const STATUS_FILTERS = ["ALL", "ACTIVE", "PENDING", "REJECTED", "REMOVED"] as const;
 
@@ -66,7 +66,12 @@ export default function HelpersPage({ api }: { api: ApiClient }) {
   useEffect(() => {
     api.get<Technician[]>(`/partners?pageSize=100`).then((res) => {
       if (res.success) {
-        setTechnicians((res.data || []).filter((p) => p.skillTier === 2));
+        // skillTier 2 also marks senior salon beauticians — keep AC partners
+        // (or legacy partners with no categories on file) only.
+        setTechnicians((res.data || []).filter((p) =>
+          p.skillTier === 2 &&
+          (!p.serviceCategory || /(^|[^a-z])ac([^a-z]|$)|air.?con/i.test(p.serviceCategory))
+        ));
       }
     });
   }, [api]);

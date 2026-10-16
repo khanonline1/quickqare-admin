@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 import type { ApiMeta } from "../types/admin";
-import { currency, formatDateTime } from "../utils/format";
+import { currency, exactCurrency, formatDateTime } from "../utils/format";
 import Pagination from "../components/Pagination";
 
 // ─── DATE RANGE ────────────────────────────────────────────────────────────────
@@ -132,6 +132,10 @@ const REPORT_ISSUE_LABELS: Record<string, string> = {
 export default function BookingsPage({ api }: { api: ApiClient }) {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  // What the list is filtered by. Typing only edits `search`; Enter or the
+  // Search button applies it. The list used to refetch on every keystroke.
+  const [query, setQuery] = useState("");
+  const latestFetch = useRef(0);
   const [dr, setDr] = useState<DateRange | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({});
@@ -140,27 +144,42 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
   const [cancelReason, setCancelReason] = useState("");
   const [forceCancelReason, setForceCancelReason] = useState("");
   const [forceCancelMsg, setForceCancelMsg] = useState("");
+  // Both cancel cards share this. On: whatever the customer paid is recorded
+  // as a refund owed (it then waits in Payments → Customer Refunds). Off: e.g.
+  // the customer was at fault and nothing is due back.
+  const [refundOnCancel, setRefundOnCancel] = useState(true);
   const [refund, setRefund] = useState({ amountInr: "", reason: "" });
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleReason, setRescheduleReason] = useState(RESCHEDULE_REASONS[0] as string);
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
   const [rescheduleMsg, setRescheduleMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [startCodeMsg, setStartCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const fetchRows = useCallback(async (page = 1) => {
     const params = new URLSearchParams({ page: String(page) });
     if (status) params.set("status", status);
-    if (search.trim()) params.set("q", search.trim());
+    if (query) params.set("q", query);
     if (dr) { params.set("start", dr.start.toISOString()); params.set("end", dr.end.toISOString()); }
+    const fetchId = ++latestFetch.current;
     const res = await api.get<any>(`/bookings?${params.toString()}`);
+    // A newer request has gone out since: this answer is for an older filter.
+    if (fetchId !== latestFetch.current) return;
     if (res.success) {
       setRows(res.data);
       setMeta(res.meta);
     }
-  }, [api, status, search, dr]);
+  }, [api, status, query, dr]);
 
   useEffect(() => {
     fetchRows(1);
   }, [fetchRows]);
+
+  // Same text again = a plain refresh; new text refetches through `query`.
+  const applySearch = () => {
+    const next = search.trim();
+    if (next === query) fetchRows(1);
+    else setQuery(next);
+  };
 
   const loadDetail = async (id: string) => {
     const res = await api.get<any>(`/bookings/${id}`);
@@ -169,19 +188,61 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
 
   const assignPartner = async () => {
     if (!selected) return;
-    await api.post(`/bookings/${selected._id}/assign`, assign);
+    // Surface the server's refusal (wrong gender for a women-only category,
+    // overloaded partner, unassignable status) instead of silently reloading.
+    const res = await api.post<any>(`/bookings/${selected._id}/assign`, assign);
+    if (!res.success) { alert(res.error?.message || "Assign failed"); return; }
     loadDetail(selected._id);
   };
 
+  // Shown after a cancel that left a refund owed, so it isn't forgotten.
+  // What is owed is the total on record minus anything refunded earlier.
+  const refundOwedNote = (data: any) => {
+    const owed = (data?.refundAmount || 0) - (data?.refundedAmount || 0);
+    return data?.refundStatus === "PENDING" && owed > 0
+      ? ` A refund of ${exactCurrency.format(owed)} is recorded — pay it from Payments → Customer Refunds.`
+      : "";
+  };
+
+  // Asked before either cancel goes through: it can't be undone, and the
+  // customer and partner are told at once.
+  const confirmCancel = () =>
+    window.confirm(
+      `Cancel booking ${selected?._id}?\n\n` +
+        "The customer and the partner are told straight away, and it can't be undone.\n" +
+        (refundOnCancel
+          ? "Whatever the customer paid will be recorded as a refund owed."
+          : "No refund will be recorded.")
+    );
+
   const cancelBooking = async () => {
     if (!selected) return;
-    await api.post(`/bookings/${selected._id}/cancel`, { reason: cancelReason });
+    if (cancelReason.trim().length < 3) { alert("Enter a reason (at least 3 characters)"); return; }
+    if (!confirmCancel()) return;
+    const res = await api.post<any>(`/bookings/${selected._id}/cancel`, { reason: cancelReason.trim(), refund: refundOnCancel });
+    if (!res.success) { alert(res.error?.message || "Cancel failed"); return; }
+    setCancelReason("");
+    const note = refundOwedNote(res.data);
+    if (note) alert(`Booking cancelled.${note}`);
     loadDetail(selected._id);
+    fetchRows(meta.pagination?.page || 1);
   };
 
   const requestRefund = async () => {
     if (!selected) return;
-    await api.post(`/bookings/${selected._id}/refund`, { amountInr: Number(refund.amountInr), reason: refund.reason });
+    const amountInr = Number(refund.amountInr);
+    if (!(amountInr >= 1) || refund.reason.trim().length < 3) {
+      alert("Enter the refund amount and a reason (at least 3 characters)");
+      return;
+    }
+    if (!window.confirm(
+      `Record a refund of ₹${amountInr} for booking ${selected._id}?\n\n` +
+        "It is added to what this customer is owed and waits in Payments → Customer Refunds."
+    )) return;
+    const res = await api.post(`/bookings/${selected._id}/refund`, { amountInr, reason: refund.reason.trim() });
+    if (!res.success) { alert(res.error?.message || "Refund request failed"); return; }
+    setRefund({ amountInr: "", reason: "" });
+    alert("Refund recorded. Press Send refund in Payments → Customer Refunds to pay it through Razorpay.");
     loadDetail(selected._id);
   };
 
@@ -191,15 +252,33 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
       setForceCancelMsg("Reason must be at least 3 characters.");
       return;
     }
+    if (!confirmCancel()) return;
     setForceCancelMsg("");
-    const res = await api.post(`/bookings/${selected._id}/force-cancel`, { reason: forceCancelReason.trim() });
+    const res = await api.post<any>(`/bookings/${selected._id}/force-cancel`, {
+      reason: forceCancelReason.trim(),
+      refund: refundOnCancel,
+    });
     if (res.success) {
       setForceCancelReason("");
-      setForceCancelMsg("Booking force-cancelled.");
+      setForceCancelMsg(`Booking force-cancelled.${refundOwedNote(res.data)}`);
       loadDetail(selected._id);
       fetchRows(1);
     } else {
       setForceCancelMsg(res.error?.message || "Force cancel failed.");
+    }
+  };
+
+  // 5 wrong start codes lock the job (it unlocks by itself 30 min later);
+  // support can unlock it straight away once they've confirmed the code.
+  const resetStartCode = async () => {
+    if (!selected) return;
+    setStartCodeMsg(null);
+    const res = await api.post(`/bookings/${selected._id}/reset-start-code`, {});
+    if (res.success) {
+      setStartCodeMsg({ ok: true, text: "Start code unlocked — the partner can try again." });
+      loadDetail(selected._id);
+    } else {
+      setStartCodeMsg({ ok: false, text: res.error?.message || "Couldn't reset the start code." });
     }
   };
 
@@ -236,7 +315,7 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
               placeholder="Search by customer name, phone or booking ID…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && fetchRows(1)}
+              onKeyDown={(e) => e.key === "Enter" && applySearch()}
             />
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">All Statuses</option>
@@ -250,9 +329,9 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
               <option value="COMPLETED">Completed</option>
               <option value="CANCELLED">Cancelled</option>
             </select>
-            <button className="button" onClick={() => fetchRows(1)}>Search</button>
-            {(search || status) && (
-              <button className="button secondary" onClick={() => { setSearch(""); setStatus(""); }}>Clear</button>
+            <button className="button" onClick={applySearch}>Search</button>
+            {(search || query || status) && (
+              <button className="button secondary" onClick={() => { setSearch(""); setQuery(""); setStatus(""); }}>Clear</button>
             )}
           </div>
         </div>
@@ -299,6 +378,11 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
               <div className="value">{selected._id}</div>
               <div className="muted">Status: {selected.status}</div>
               <div className="muted">Created: {formatDateTime(selected.createdAt)}</div>
+              {selected.refundStatus && selected.refundStatus !== "NONE" && (
+                <div className="muted">
+                  Refund: {selected.refundStatus} · {exactCurrency.format(selected.refundAmount || 0)}
+                </div>
+              )}
             </div>
             <div className="card" style={{ flex: 1 }}>
               <div className="label">Customer</div>
@@ -418,6 +502,11 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
             <div className="card" style={{ flex: 1 }}>
               <div className="label">Cancel Booking</div>
               <input className="input" placeholder="Reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+              {/* flexDirection: the global `label` rule stacks children in a column */}
+              <label className="checkbox-row" style={{ cursor: "pointer", flexDirection: "row" }}>
+                <input type="checkbox" checked={refundOnCancel} onChange={(e) => setRefundOnCancel(e.target.checked)} />
+                <span className="checkbox-label">Refund the customer in full (if they paid)</span>
+              </label>
               <button className="button danger" onClick={cancelBooking}>Cancel</button>
             </div>
             <div className="card" style={{ flex: 1 }}>
@@ -441,6 +530,10 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
                 value={forceCancelReason}
                 onChange={(e) => { setForceCancelReason(e.target.value); setForceCancelMsg(""); }}
               />
+              <label className="checkbox-row" style={{ cursor: "pointer", flexDirection: "row" }}>
+                <input type="checkbox" checked={refundOnCancel} onChange={(e) => setRefundOnCancel(e.target.checked)} />
+                <span className="checkbox-label">Refund the customer in full (if they paid)</span>
+              </label>
               {forceCancelMsg && (
                 <div style={{ fontSize: 13, marginTop: 4, color: forceCancelMsg.includes("force-cancelled") ? "#16a34a" : "#dc2626" }}>
                   {forceCancelMsg}
@@ -480,6 +573,27 @@ export default function BookingsPage({ api }: { api: ApiClient }) {
               )}
             </div>
           </div>
+
+          {(selected.startCodeAttempts || 0) > 0 && !["COMPLETED", "CANCELLED"].includes(selected.status) && (
+            <div className="card" style={{ marginTop: 16, borderLeft: "4px solid #dc2626" }}>
+              <div className="label" style={{ color: "#dc2626" }}>Start Code</div>
+              <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>
+                Wrong start-code attempts: {selected.startCodeAttempts} of 5
+                {selected.startCodeLockedAt
+                  ? ` — locked since ${formatDateTime(selected.startCodeLockedAt)} (unlocks by itself after 30 min)`
+                  : ""}
+                . Unlock only after confirming with the customer.
+              </div>
+              <button className="button danger" onClick={resetStartCode}>
+                Reset start code
+              </button>
+              {startCodeMsg && (
+                <div style={{ fontSize: 13, marginTop: 6, color: startCodeMsg.ok ? "#16a34a" : "#dc2626" }}>
+                  {startCodeMsg.text}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="section" style={{ marginTop: 16 }}>
             <h3>Assignment Audit</h3>

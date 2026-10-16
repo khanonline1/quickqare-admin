@@ -187,13 +187,15 @@ export default function OffersPage({ api }: { api: ApiClient }) {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this offer?")) return;
-    await api.delete(`/offers/${id}`);
+    const res = await api.delete(`/offers/${id}`);
+    if (!res.success) { alert(res.error?.message || "Failed to delete offer"); return; }
     if (editingId === id) { setShowForm(false); resetForm(); }
     fetchRows();
   };
 
   const handleToggle = async (row: OfferRow) => {
-    await api.patch(`/offers/${row._id}`, { isActive: !row.isActive });
+    const res = await api.patch(`/offers/${row._id}`, { isActive: !row.isActive });
+    if (!res.success) { alert(res.error?.message || "Failed to update offer"); return; }
     fetchRows();
   };
 

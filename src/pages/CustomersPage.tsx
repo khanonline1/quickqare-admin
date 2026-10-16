@@ -1,16 +1,21 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 import type { ApiMeta } from "../types/admin";
 import { currency } from "../utils/format";
 import Pagination from "../components/Pagination";
 
 export default function CustomersPage({ api }: { api: ApiClient }) {
+  const [search, setSearch] = useState("");
+  // Applied on Enter / Search, not on every keystroke (see BookingsPage).
   const [query, setQuery] = useState("");
+  const latestFetch = useRef(0);
   const [rows, setRows] = useState<any[]>([]);
   const [meta, setMeta] = useState<ApiMeta>({});
 
   const fetchRows = useCallback(async (page = 1) => {
+    const fetchId = ++latestFetch.current;
     const res = await api.get<any>(`/customers?q=${encodeURIComponent(query)}&page=${page}`);
+    if (fetchId !== latestFetch.current) return; // answer to an older search
     if (res.success) {
       setRows(res.data);
       setMeta(res.meta);
@@ -21,8 +26,15 @@ export default function CustomersPage({ api }: { api: ApiClient }) {
     fetchRows(1);
   }, [fetchRows]);
 
+  const applySearch = () => {
+    const next = search.trim();
+    if (next === query) fetchRows(1);
+    else setQuery(next);
+  };
+
   const updateStatus = async (id: string, status: string) => {
-    await api.patch(`/customers/${id}/status`, { status });
+    const res = await api.patch(`/customers/${id}/status`, { status });
+    if (!res.success) { alert(res.error?.message || "Failed to update customer"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 
@@ -30,8 +42,14 @@ export default function CustomersPage({ api }: { api: ApiClient }) {
     <>
       <div className="section">
         <div className="row">
-          <input className="input" placeholder="Search name / phone / email" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <button className="button" onClick={() => fetchRows(1)}>Search</button>
+          <input
+            className="input"
+            placeholder="Search name / phone / email"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && applySearch()}
+          />
+          <button className="button" onClick={applySearch}>Search</button>
         </div>
       </div>
 

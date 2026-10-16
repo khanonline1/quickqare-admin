@@ -67,6 +67,10 @@ export default function ComplaintsPage({
         if (statusFilter) params.status = statusFilter;
 
         const res = (await api.getComplaints(params)) as any;
+        if (!res.success) {
+          setError(res.error?.message || "Failed to load complaints. Please try again.");
+          return;
+        }
         const newComplaints: Complaint[] = res.data?.complaints ?? res.data ?? [];
 
         if (p === 1) {
@@ -92,10 +96,11 @@ export default function ComplaintsPage({
   const updateStatus = async (id: string, newStatus: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await api.updateComplaintStatus(id, {
+      const res = await api.updateComplaintStatus(id, {
         status: newStatus,
         notes: `Status updated to ${newStatus}`,
       });
+      if (!res.success) { setError(res.error?.message || "Failed to update status."); return; }
       setComplaints((prev) => prev.map((c) => (c.id === id ? { ...c, status: newStatus } : c)));
     } catch {
       setError("Failed to update status.");

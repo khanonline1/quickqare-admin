@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 import type { ApiMeta } from "../types/admin";
+import { formatDateTime } from "../utils/format";
 import Pagination from "../components/Pagination";
 
 export default function DisputesPage({ api }: { api: ApiClient }) {
@@ -10,6 +11,7 @@ export default function DisputesPage({ api }: { api: ApiClient }) {
   const [resolution, setResolution] = useState("NO_ACTION");
   const [notes, setNotes] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const fetchRows = useCallback(async (page = 1) => {
     const res = await api.get<any>(`/disputes?page=${page}`);
@@ -28,12 +30,21 @@ export default function DisputesPage({ api }: { api: ApiClient }) {
 
   const resolveDispute = async () => {
     if (!selected) return;
-    await api.post(`/disputes/${selected._id}/resolve`, {
-      resolution,
-      notes,
-      refundAmountInr: Number(refundAmount || 0)
-    });
-    loadDetail(selected._id);
+    setSaving(true);
+    try {
+      const res = await api.post(`/disputes/${selected._id}/resolve`, {
+        resolution,
+        notes,
+        refundAmountInr: resolution === "REFUND" ? Number(refundAmount || 0) : 0
+      });
+      if (!res.success) { alert(res.error?.message || "Failed to resolve dispute"); return; }
+      setNotes("");
+      setRefundAmount("");
+      loadDetail(selected._id);
+      fetchRows(meta.pagination?.page || 1);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -66,7 +77,18 @@ export default function DisputesPage({ api }: { api: ApiClient }) {
         <Pagination meta={meta} onPage={fetchRows} />
       </div>
 
-      {selected && (
+      {/* A dispute is resolved once: after that it shows the outcome, not the form. */}
+      {selected && selected.status === "RESOLVED" && (
+        <div className="section">
+          <h3>Resolved</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            {String(selected.resolution || "").replace(/_/g, " ")}
+            {selected.resolvedAt ? ` · ${formatDateTime(selected.resolvedAt)}` : ""}
+          </p>
+        </div>
+      )}
+
+      {selected && selected.status !== "RESOLVED" && (
         <div className="section">
           <h3>Resolve Dispute</h3>
           <div className="row">
@@ -76,9 +98,17 @@ export default function DisputesPage({ api }: { api: ApiClient }) {
               <option value="PENALTY">Penalty</option>
             </select>
             <input className="input" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <input className="input" placeholder="Refund amount" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
-            <button className="button" onClick={resolveDispute}>Resolve</button>
+            {resolution === "REFUND" && (
+              <input className="input" placeholder="Refund amount" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
+            )}
+            <button className="button" onClick={resolveDispute} disabled={saving}>{saving ? "Saving…" : "Resolve"}</button>
           </div>
+          {resolution === "REFUND" && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              The refund is recorded on the booking (never more than the customer paid) and waits in
+              Payments → Customer Refunds for finance to pay.
+            </p>
+          )}
         </div>
       )}
     </>

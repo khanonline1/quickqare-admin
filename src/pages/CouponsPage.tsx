@@ -184,7 +184,8 @@ export default function CouponsPage({ api }: { api: ApiClient }) {
 
   // ── Toggle active ──
   const toggleActive = async (row: any) => {
-    await api.patch(`/coupons/${row._id}`, { isActive: !row.isActive });
+    const res = await api.patch(`/coupons/${row._id}`, { isActive: !row.isActive });
+    if (!res.success) { alert(res.error?.message || "Failed to update coupon"); return; }
     fetchRows(meta.pagination?.page || 1);
   };
 

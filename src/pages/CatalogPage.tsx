@@ -11,7 +11,10 @@ type CatalogItem = {
   sortOrder: number;
 };
 
-const UNITS = ["piece", "metre", "centimetre", "litre", "ml", "kg", "gram", "set", "pair", "roll", "pack", "hour"];
+// Length units include foot/inch because trade goods (copper pipe, wiring,
+// drain hose) are quoted in feet on-site — pricing them per metre forced the
+// partner to convert, and the estimate then billed the rounded conversion.
+const UNITS = ["piece", "metre", "centimetre", "foot", "inch", "litre", "ml", "kg", "gram", "set", "pair", "roll", "pack", "hour"];
 
 const EMPTY_FORM = { name: "", priceInr: "", unit: "piece", description: "", sortOrder: "0" };
 
@@ -75,13 +78,15 @@ export default function CatalogPage({ api }: { api: ApiClient }) {
   };
 
   const toggleActive = async (item: CatalogItem) => {
-    await api.patch(`/catalog/${item._id}`, { isActive: !item.isActive });
+    const res = await api.patch(`/catalog/${item._id}`, { isActive: !item.isActive });
+    if (!res.success) { alert(res.error?.message || "Failed to update item"); return; }
     fetchItems();
   };
 
   const handleDelete = async (item: CatalogItem) => {
     if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
-    await api.delete(`/catalog/${item._id}`);
+    const res = await api.delete(`/catalog/${item._id}`);
+    if (!res.success) { alert(res.error?.message || "Failed to delete item"); return; }
     fetchItems();
   };
 

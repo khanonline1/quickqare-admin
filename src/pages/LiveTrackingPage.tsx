@@ -132,7 +132,8 @@ export default function LiveTrackingPage({ api }: Props) {
   const requestLocationPing = useCallback(async () => {
     setPinging(true);
     try {
-      await api.post("/partners/request-locations");
+      const res = await api.post("/partners/request-locations");
+      if (!res.success) { alert(res.error?.message || "Couldn't ask partners for their location"); return; }
       // Give partners 3s to respond then refresh
       setTimeout(() => fetchLocations(), 3000);
     } finally {
