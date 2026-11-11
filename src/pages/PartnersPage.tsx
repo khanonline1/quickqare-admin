@@ -348,6 +348,24 @@ function PartnerDetailPanel({
     }
   };
 
+<<<<<<< HEAD
+=======
+  const [windowSaving, setWindowSaving] = useState(false);
+  const handleBookingWindowChange = async (patch: { minLeadDays?: number; availableFrom?: string | null }) => {
+    setWindowSaving(true);
+    try {
+      const res = await api.patch<any>(`/partners/${partnerId}/booking-window`, patch);
+      if (res.success) {
+        setData((prev) => prev ? { ...prev, partner: { ...prev.partner, ...res.data } } : prev);
+      } else {
+        alert(res.error?.message || "Failed to update booking window");
+      }
+    } finally {
+      setWindowSaving(false);
+    }
+  };
+
+>>>>>>> 073e824 (Upgrade admin)
   const handleSkillTierChange = async (skillTier: number) => {
     setTierSaving(true);
     try {
@@ -500,6 +518,35 @@ function PartnerDetailPanel({
                         <option value="2">{partnerIsAC ? "Technician" : "Senior beautician"}</option>
                       </select>
                     ) : "—"}
+<<<<<<< HEAD
+=======
+                  </div>
+                  <div>
+                    <span style={{ color: "var(--muted-2)" }}>Bookable from: </span>
+                    <select
+                      className="input"
+                      title="Minimum notice before this partner can be booked"
+                      style={{ height: 24, fontSize: 12, padding: "0 4px", width: "auto" }}
+                      value={String(p?.minLeadDays || 0)}
+                      disabled={windowSaving}
+                      onChange={(e) => handleBookingWindowChange({ minLeadDays: Number(e.target.value) })}
+                    >
+                      <option value="0">Same day</option>
+                      <option value="1">Next day or later</option>
+                      <option value="2">2 days ahead</option>
+                      <option value="3">3 days ahead</option>
+                      <option value="7">1 week ahead</option>
+                    </select>
+                    {" · not before "}
+                    <input
+                      type="date"
+                      className="input"
+                      style={{ height: 24, fontSize: 12, padding: "0 4px", width: "auto" }}
+                      value={p?.availableFrom ? String(p.availableFrom).slice(0, 10) : ""}
+                      disabled={windowSaving}
+                      onChange={(e) => handleBookingWindowChange({ availableFrom: e.target.value || null })}
+                    />
+>>>>>>> 073e824 (Upgrade admin)
                   </div>
                   <div><span style={{ color: "var(--muted-2)" }}>Subscription: </span>{p?.subscriptionActive ? "Active" : "Inactive"}</div>
                 </div>

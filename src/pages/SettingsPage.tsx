@@ -142,6 +142,9 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
   const [platformFeePercent, setPlatformFeePercent] = useState(0);
   const [platformFeeFlatInr, setPlatformFeeFlatInr] = useState(0);
   const [taxPercent, setTaxPercent] = useState(18);
+  // Free-cancel abuse limit (0 = no limit)
+  const [freeCancelLimit, setFreeCancelLimit] = useState(3);
+  const [freeCancelLimitDays, setFreeCancelLimitDays] = useState(30);
   const [appSaving, setAppSaving] = useState(false);
 
   // Emergency controls
@@ -222,6 +225,9 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
         setPlatformFeePercent(Number(pr.platformFeePercent) || 0);
         setPlatformFeeFlatInr(Number(pr.platformFeeFlatInr) || 0);
         setTaxPercent(Number(pr.taxPercent ?? 18));
+        const cx = res.data.cancellation || {};
+        setFreeCancelLimit(Number(cx.freeCancelLimit ?? 3));
+        setFreeCancelLimitDays(Number(cx.freeCancelLimitDays ?? 30));
         setBookingsDisabled(Boolean(res.data.bookingsDisabled));
         setPaymentsFreezed(Boolean(res.data.paymentsFreezed));
         setPayoutsFreezed(Boolean(res.data.payoutsFreezed));
@@ -294,6 +300,10 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           platformFeePercent: Number(platformFeePercent) || 0,
           platformFeeFlatInr: Number(platformFeeFlatInr) || 0,
           taxPercent:         Number(taxPercent)         || 0,
+        },
+        cancellation: {
+          freeCancelLimit:     Math.max(0, Math.round(Number(freeCancelLimit) || 0)),
+          freeCancelLimitDays: Math.max(1, Math.round(Number(freeCancelLimitDays) || 30)),
         },
       });
       if (!res.success) alert(res.error?.message || "Failed to save settings");
@@ -632,6 +642,47 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                 Math.round((1000 * (Number(platformFeePercent) || 0)) / 100 + (Number(platformFeeFlatInr) || 0))
                 + Math.round(((1000 + Math.round((1000 * (Number(platformFeePercent) || 0)) / 100 + (Number(platformFeeFlatInr) || 0))) * (Number(taxPercent) || 0)) / 100)
               }"</strong>.
+            </div>
+          </div>
+
+          <div style={{ marginTop: 32, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Free Cancellation Limit</h3>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+              Each service's free cancellation window (Services → Cancellation policy) gives a 100% refund shortly after booking.
+              A customer who uses it too often doesn't get the window on new bookings until older cancellations drop out of the period.
+            </p>
+          </div>
+
+          <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 13 }}>
+              No free cancellation after
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="1"
+                value={freeCancelLimit}
+                onChange={(e) => setFreeCancelLimit(Number(e.target.value))}
+                disabled={loading}
+                style={{ width: 70 }}
+              />
+              free cancellations in
+              <input
+                className="input"
+                type="number"
+                min={1}
+                step="1"
+                value={freeCancelLimitDays}
+                onChange={(e) => setFreeCancelLimitDays(Number(e.target.value))}
+                disabled={loading}
+                style={{ width: 70 }}
+              />
+              days
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 6 }}>
+              {Number(freeCancelLimit) > 0
+                ? `Once a customer has ${Number(freeCancelLimit)} free cancellations in the last ${Number(freeCancelLimitDays) || 30} days, new bookings get the normal refund tiers only.`
+                : "0 = no limit: every booking gets the free cancellation window."}
             </div>
           </div>
 

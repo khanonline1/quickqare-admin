@@ -2,24 +2,25 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
 import { currency } from "../utils/format";
 
-type GstRow = {
-  date: string;
+type GstFigures = {
   bookingCount: number;
   baseAmount: number;
   gstAmount: number;
   totalAmount: number;
+  // Refunds on record (owed or paid back) and what is left after them.
+  refundedAmount: number;
+  refundedGstAmount: number;
+  netGstAmount: number;
+  netTotalAmount: number;
 };
+
+type GstRow = GstFigures & { date: string };
 
 type GstReport = {
   startDate: string;
   endDate: string;
   timezone: string;
-  summary: {
-    bookingCount: number;
-    baseAmount: number;
-    gstAmount: number;
-    totalAmount: number;
-  };
+  summary: GstFigures;
   rows: GstRow[];
 };
 
@@ -69,15 +70,33 @@ export default function AuditPage({ api }: { api: ApiClient }) {
       ["Bookings", report.summary.bookingCount],
       ["Base Amount", report.summary.baseAmount],
       ["GST Amount", report.summary.gstAmount],
+      ["Refunded GST", report.summary.refundedGstAmount],
+      ["Net GST", report.summary.netGstAmount],
       ["Total Amount", report.summary.totalAmount],
+      ["Refunded Amount", report.summary.refundedAmount],
+      ["Net Total Amount", report.summary.netTotalAmount],
       [],
-      ["Date", "Bookings", "Base Amount", "GST Amount", "Total Amount"],
+      [
+        "Date",
+        "Bookings",
+        "Base Amount",
+        "GST Amount",
+        "Refunded GST",
+        "Net GST",
+        "Total Amount",
+        "Refunded Amount",
+        "Net Total Amount",
+      ],
       ...report.rows.map((row) => [
         row.date,
         row.bookingCount,
         row.baseAmount,
         row.gstAmount,
+        row.refundedGstAmount,
+        row.netGstAmount,
         row.totalAmount,
+        row.refundedAmount,
+        row.netTotalAmount,
       ]),
     ];
 
@@ -127,7 +146,10 @@ export default function AuditPage({ api }: { api: ApiClient }) {
             Download CSV
           </button>
         </div>
-        <p className="muted">Paid bookings only. Timezone: {report?.timezone || "Asia/Kolkata"}.</p>
+        <p className="muted">
+          Paid bookings only, grouped by booking date. Refunds (owed or paid back) are taken off, with the
+          tax inside them. Timezone: {report?.timezone || "Asia/Kolkata"}.
+        </p>
       </div>
 
       <div className="card-grid">
@@ -144,8 +166,24 @@ export default function AuditPage({ api }: { api: ApiClient }) {
           <div className="value">{currency.format(report?.summary.gstAmount || 0)}</div>
         </div>
         <div className="card">
+          <div className="label">Refunded GST</div>
+          <div className="value">{currency.format(report?.summary.refundedGstAmount || 0)}</div>
+        </div>
+        <div className="card">
+          <div className="label">Net GST</div>
+          <div className="value">{currency.format(report?.summary.netGstAmount || 0)}</div>
+        </div>
+        <div className="card">
           <div className="label">Total Amount</div>
           <div className="value">{currency.format(report?.summary.totalAmount || 0)}</div>
+        </div>
+        <div className="card">
+          <div className="label">Refunded Amount</div>
+          <div className="value">{currency.format(report?.summary.refundedAmount || 0)}</div>
+        </div>
+        <div className="card">
+          <div className="label">Net Total</div>
+          <div className="value">{currency.format(report?.summary.netTotalAmount || 0)}</div>
         </div>
       </div>
 
@@ -158,7 +196,11 @@ export default function AuditPage({ api }: { api: ApiClient }) {
               <th>Bookings</th>
               <th>Base Amount</th>
               <th>GST Amount</th>
+              <th>Refunded GST</th>
+              <th>Net GST</th>
               <th>Total Amount</th>
+              <th>Refunded Amount</th>
+              <th>Net Total</th>
             </tr>
           </thead>
           <tbody>
@@ -168,7 +210,11 @@ export default function AuditPage({ api }: { api: ApiClient }) {
                 <td>{row.bookingCount}</td>
                 <td>{currency.format(row.baseAmount || 0)}</td>
                 <td>{currency.format(row.gstAmount || 0)}</td>
+                <td>{currency.format(row.refundedGstAmount || 0)}</td>
+                <td>{currency.format(row.netGstAmount || 0)}</td>
                 <td>{currency.format(row.totalAmount || 0)}</td>
+                <td>{currency.format(row.refundedAmount || 0)}</td>
+                <td>{currency.format(row.netTotalAmount || 0)}</td>
               </tr>
             ))}
           </tbody>
