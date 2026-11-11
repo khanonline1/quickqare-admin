@@ -348,8 +348,6 @@ function PartnerDetailPanel({
     }
   };
 
-<<<<<<< HEAD
-=======
   const [windowSaving, setWindowSaving] = useState(false);
   const handleBookingWindowChange = async (patch: { minLeadDays?: number; availableFrom?: string | null }) => {
     setWindowSaving(true);
@@ -365,7 +363,7 @@ function PartnerDetailPanel({
     }
   };
 
->>>>>>> 073e824 (Upgrade admin)
+
   const handleSkillTierChange = async (skillTier: number) => {
     setTierSaving(true);
     try {
@@ -518,8 +516,6 @@ function PartnerDetailPanel({
                         <option value="2">{partnerIsAC ? "Technician" : "Senior beautician"}</option>
                       </select>
                     ) : "—"}
-<<<<<<< HEAD
-=======
                   </div>
                   <div>
                     <span style={{ color: "var(--muted-2)" }}>Bookable from: </span>
@@ -546,7 +542,6 @@ function PartnerDetailPanel({
                       disabled={windowSaving}
                       onChange={(e) => handleBookingWindowChange({ availableFrom: e.target.value || null })}
                     />
->>>>>>> 073e824 (Upgrade admin)
                   </div>
                   <div><span style={{ color: "var(--muted-2)" }}>Subscription: </span>{p?.subscriptionActive ? "Active" : "Inactive"}</div>
                 </div>

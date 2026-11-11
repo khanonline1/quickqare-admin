@@ -84,16 +84,11 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
   // ── Cancellation policy modal ─────────────────────────────────────────
   const [cancelPolicyService, setCancelPolicyService] = useState<any | null>(null);
   const [cancelTiers, setCancelTiers] = useState<{ minHoursBefore: string; refundPercent: string }[]>([]);
-<<<<<<< HEAD
-  const [graceWindowMinutes, setGraceWindowMinutes] = useState("0");
-  const [graceLeadHours, setGraceLeadHours] = useState("0");
-=======
   // Free-cancel window: every booking + a longer one for last-minute bookings.
   const [graceAllMinutes, setGraceAllMinutes] = useState("0");
   const [graceWindowMinutes, setGraceWindowMinutes] = useState("0");
   const [graceLeadHours, setGraceLeadHours] = useState("0");
   const [graceEndsOnTheWay, setGraceEndsOnTheWay] = useState(true);
->>>>>>> 073e824 (Upgrade admin)
   const [cancelPolicyBusy, setCancelPolicyBusy] = useState(false);
   const [cancelScope, setCancelScope] = useState<"service" | "category" | "all">("service");
 
@@ -102,10 +97,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
       ? row.cancellationTiers.map((t: any) => ({ minHoursBefore: String(t.minHoursBefore), refundPercent: String(t.refundPercent) }))
       : [{ minHoursBefore: "24", refundPercent: "100" }, { minHoursBefore: "4", refundPercent: "75" }, { minHoursBefore: "1", refundPercent: "50" }, { minHoursBefore: "0", refundPercent: "25" }];
     setCancelTiers(tiers);
-<<<<<<< HEAD
-    setGraceWindowMinutes(String(row.cancellationGrace?.windowMinutes ?? 0));
-    setGraceLeadHours(String(row.cancellationGrace?.appliesBelowLeadHours ?? 0));
-=======
     const g = row.cancellationGrace || {};
     let all = Number(g.allBookingsWindowMinutes) || 0;
     let lastMinute = Number(g.windowMinutes) || 0;
@@ -121,7 +112,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
     setGraceLeadHours(String(lastMinute > 0 ? lead : 0));
     setGraceEndsOnTheWay(g.endsWhenPartnerOnTheWay !== false);
     setCancelScope("service");
->>>>>>> 073e824 (Upgrade admin)
     setCancelPolicyService(row);
   };
 
@@ -133,15 +123,9 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
         alert("Invalid values — hours must be ≥ 0 and refund % must be 0–100"); return;
       }
     }
-<<<<<<< HEAD
-    const gWindow = Number(graceWindowMinutes), gLead = Number(graceLeadHours);
-    if (isNaN(gWindow) || gWindow < 0 || isNaN(gLead) || gLead < 0) {
-      alert("Invalid grace values — minutes and hours must be ≥ 0"); return;
-=======
     const gAll = Number(graceAllMinutes), gWindow = Number(graceWindowMinutes), gLead = Number(graceLeadHours);
     if (isNaN(gAll) || gAll < 0 || isNaN(gWindow) || gWindow < 0 || isNaN(gLead) || gLead < 0) {
       alert("Invalid free-cancel values — minutes and hours must be ≥ 0"); return;
->>>>>>> 073e824 (Upgrade admin)
     }
     if (gWindow > 0 && gLead <= 0) {
       alert("Set how many hours before the service counts as a last-minute booking (or put the minutes in \"Every booking\")."); return;
@@ -152,15 +136,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
     setCancelPolicyBusy(true);
     try {
       const tiers = cancelTiers.map(t => ({ minHoursBefore: Number(t.minHoursBefore), refundPercent: Number(t.refundPercent) }));
-<<<<<<< HEAD
-      const grace = { windowMinutes: gWindow, appliesBelowLeadHours: gLead };
-      const res = await api.patch<any>(`/services/${cancelPolicyService._id}/cancellation-policy`, {
-        tiers,
-        grace,
-      });
-      if (!res.success) { alert(res.error?.message || "Failed to save policy"); return; }
-      setRows(prev => prev.map(r => r._id === cancelPolicyService._id
-=======
       const grace = {
         allBookingsWindowMinutes: gAll,
         windowMinutes: gWindow,
@@ -176,7 +151,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
       setRows(prev => prev.map(r => cancelScope === "all"
         || r._id === cancelPolicyService._id
         || (cancelScope === "category" && (r.category?._id || r.category) === (cancelPolicyService.category?._id || cancelPolicyService.category))
->>>>>>> 073e824 (Upgrade admin)
         ? { ...r, cancellationTiers: tiers, cancellationGrace: grace }
         : r));
       setCancelPolicyService(null);
@@ -1325,18 +1299,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
 
             <div style={{ marginBottom: 20, padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, display: "block" }}>
-<<<<<<< HEAD
-                Last-minute order grace period
-              </span>
-              <p style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 0, marginBottom: 10 }}>
-                Orders placed with less notice than the threshold get a free-cancel window
-                (100% refund) from the moment of booking, before the tiers above apply.
-                Set window to 0 to disable. Threshold 0 = applies to every order.
-              </p>
-              <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-                  Window (minutes)
-=======
                 Free cancellation window
               </span>
               <p style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 0, marginBottom: 10 }}>
@@ -1346,20 +1308,10 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <label style={{ fontSize: 13, display: "flex", flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   Every booking:
->>>>>>> 073e824 (Upgrade admin)
                   <input
                     className="input"
                     type="number"
                     min={0}
-<<<<<<< HEAD
-                    style={{ width: 90 }}
-                    value={graceWindowMinutes}
-                    onChange={e => setGraceWindowMinutes(e.target.value)}
-                  />
-                </label>
-                <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-                  Only if booked under (hours before service)
-=======
                     style={{ width: 80 }}
                     value={graceAllMinutes}
                     onChange={e => setGraceAllMinutes(e.target.value)}
@@ -1377,21 +1329,10 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
                     onChange={e => setGraceWindowMinutes(e.target.value)}
                   />
                   minutes, if booked less than
->>>>>>> 073e824 (Upgrade admin)
                   <input
                     className="input"
                     type="number"
                     min={0}
-<<<<<<< HEAD
-                    style={{ width: 90 }}
-                    value={graceLeadHours}
-                    onChange={e => setGraceLeadHours(e.target.value)}
-                  />
-                </label>
-              </div>
-            </div>
-
-=======
                     style={{ width: 70 }}
                     value={graceLeadHours}
                     onChange={e => setGraceLeadHours(e.target.value)}
@@ -1418,7 +1359,7 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
               </select>
             </label>
 
->>>>>>> 073e824 (Upgrade admin)
+
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button className="button secondary" onClick={() => setCancelPolicyService(null)}>Cancel</button>
               <button className="button primary" onClick={saveCancelPolicy} disabled={cancelPolicyBusy}>
