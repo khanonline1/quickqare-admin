@@ -363,7 +363,6 @@ function PartnerDetailPanel({
     }
   };
 
-
   const handleSkillTierChange = async (skillTier: number) => {
     setTierSaving(true);
     try {

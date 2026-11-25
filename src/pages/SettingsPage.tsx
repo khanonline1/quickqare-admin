@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/adminApi";
+import { shrinkImage } from "../utils/shrinkImage";
 
 // ── Image upload picker ───────────────────────────────────────────────────────
 function ImageUploadField({
@@ -15,7 +16,10 @@ function ImageUploadField({
   const handleFile = async (file: File) => {
     setError(""); setUploading(true);
     try {
-      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload?folder=settings", file, "image");
+      // Photos (home tiles) are shrunk first: straight-from-camera files are
+      // over the API host's ~1 MB request limit. Icons keep their PNG as is.
+      const toSend = mediaType === "photo" ? await shrinkImage(file) : file;
+      const result = await api.uploadFile<{ success: boolean; imageUrl: string }>("/api/upload?folder=settings", toSend, "image");
       if (result.success && result.imageUrl) onChange(result.imageUrl);
       else setError("Upload failed");
     } catch (e: unknown) {
@@ -567,7 +571,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
           <div style={{ marginTop: 32, marginBottom: 16 }}>
             <h3 style={{ margin: "0 0 4px 0", fontSize: 16, fontWeight: 700 }}>Fees and Taxes</h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
-              Customers see one combined <strong>"Fees and Taxes"</strong> line on the bill. Platform fee is your service charge; tax is GST. Both apply to every paid booking.
+              Customers see one combined <strong>"Fees and Taxes"</strong> line on the bill. Platform fee is your service charge; tax is GST. These are the defaults for every paid booking — a service can have its own GST rate under Services → Manage → Fees &amp; GST.
             </p>
           </div>
 
@@ -630,7 +634,7 @@ export default function SettingsPage({ api }: { api: ApiClient }) {
                   />
                   <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 13 }}>%</span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 4 }}>GST. Default 18%</div>
+                <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 4 }}>Default GST (18% if unset). Used by services with no GST of their own</div>
               </div>
             </div>
 

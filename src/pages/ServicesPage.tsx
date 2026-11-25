@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 import type { ApiClient } from "../api/adminApi";
 import ReactCrop, { type Crop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
+import { shrinkImage } from "../utils/shrinkImage";
 
 const FACE_WAX_AREAS = [
   { key: "upper-lip", label: "Upper lip" },
@@ -74,6 +75,9 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
     imageUrl: "",
     webImageUrl: "",
     duration: "",
+    platformFeePercent: "",
+    platformFeeFlatInr: "",
+    taxPercent: "",
   });
   const [serviceFormBusy, setServiceFormBusy] = useState(false);
 
@@ -91,6 +95,42 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
   const [graceEndsOnTheWay, setGraceEndsOnTheWay] = useState(true);
   const [cancelPolicyBusy, setCancelPolicyBusy] = useState(false);
   const [cancelScope, setCancelScope] = useState<"service" | "category" | "all">("service");
+
+  // ── Fees & GST modal ──────────────────────────────────────────────────
+  const [feesService, setFeesService] = useState<any | null>(null);
+  const [feePlatformPercent, setFeePlatformPercent] = useState<string>('');
+  const [feePlatformFlat, setFeePlatformFlat] = useState<string>('');
+  const [feeTaxPercent, setFeeTaxPercent] = useState<string>('');
+  const [feesSaving, setFeesSaving] = useState(false);
+
+  const openFeesModal = (row: any) => {
+    setFeePlatformPercent(row.platformFeePercent != null ? String(row.platformFeePercent) : '');
+    setFeePlatformFlat(row.platformFeeFlatInr != null ? String(row.platformFeeFlatInr) : '');
+    setFeeTaxPercent(row.taxPercent != null ? String(row.taxPercent) : '');
+    setFeesService(row);
+  };
+
+  const saveFeesModal = async () => {
+    if (!feesService) return;
+    setFeesSaving(true);
+    try {
+      const res = await api.patch<any>(`/services/${feesService._id}`, {
+        platformFeePercent: feePlatformPercent === '' ? null : Number(feePlatformPercent),
+        platformFeeFlatInr: feePlatformFlat === '' ? null : Number(feePlatformFlat),
+        taxPercent: feeTaxPercent === '' ? null : Number(feeTaxPercent),
+      });
+      if (!res.success) { alert(res.error?.message || "Failed to save fees"); return; }
+      setRows(prev => prev.map(r => r._id === feesService._id ? {
+        ...r,
+        platformFeePercent: feePlatformPercent === '' ? null : Number(feePlatformPercent),
+        platformFeeFlatInr: feePlatformFlat === '' ? null : Number(feePlatformFlat),
+        taxPercent: feeTaxPercent === '' ? null : Number(feeTaxPercent),
+      } : r));
+      setFeesService(null);
+    } finally {
+      setFeesSaving(false);
+    }
+  };
 
   const openCancelPolicy = (row: any) => {
     const tiers = Array.isArray(row.cancellationTiers) && row.cancellationTiers.length > 0
@@ -260,6 +300,77 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
     fetchCategories();
     fetchSubCategories();
   }, [fetchRows, fetchCategories, fetchSubCategories]);
+
+  // The default GST % from Settings — what a service with no GST of its own is
+  // charged. Only used to label the "GST %" column; a role that can't read
+  // Settings simply sees "default" without the number.
+  const [defaultGst, setDefaultGst] = useState<number | null>(null);
+  // The web + app show ONE "Women’s Salon & Self-Care" tile for the three
+  // women's categories. Its photo is not a category image — it is the
+  // homeTheme.categoryIcons.womenSalon setting (also editable in Settings →
+  // Home Screen Theme). "no-access" = this login can't read/write Settings.
+  const [womenTileUrl, setWomenTileUrl] = useState("");
+  const [womenTileState, setWomenTileState] = useState<"loading" | "ready" | "no-access">("loading");
+  const [womenTileBusy, setWomenTileBusy] = useState(false);
+  useEffect(() => {
+    api.get<any>("/settings").then((res) => {
+      if (!res.success) { setWomenTileState("no-access"); return; }
+      const rate = Number(res.data?.pricing?.taxPercent ?? 18);
+      if (Number.isFinite(rate)) setDefaultGst(rate);
+      setWomenTileUrl(res.data?.homeTheme?.categoryIcons?.womenSalon || "");
+      setWomenTileState("ready");
+    });
+  }, [api]);
+
+  // Sends only womenSalon — the backend keeps every other category icon as is.
+  const saveWomenTilePhoto = async (url: string) => {
+    const res = await api.patch<any>("/settings", { homeTheme: { categoryIcons: { womenSalon: url } } });
+    if (!res.success) throw new Error(res.error?.message || "Failed to save the tile photo");
+    setWomenTileUrl(res.data?.homeTheme?.categoryIcons?.womenSalon ?? url);
+  };
+
+  const handleWomenTileUpload = async (file?: File | null) => {
+    if (!file) return;
+    setWomenTileBusy(true);
+    try {
+      const small = await shrinkImage(file);
+      const res = await api.uploadFile<{ success: boolean; imageUrl: string; message?: string }>("/api/upload?folder=settings", small);
+      if (!res.success || !res.imageUrl) throw new Error(res.message || "Image upload failed");
+      await saveWomenTilePhoto(res.imageUrl);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setWomenTileBusy(false);
+    }
+  };
+
+  const resetWomenTilePhoto = async () => {
+    if (!confirm("Remove the photo? The tile goes back to the default artwork on web and app.")) return;
+    setWomenTileBusy(true);
+    try { await saveWomenTilePhoto(""); }
+    catch (e) { alert(e instanceof Error ? e.message : "Failed to remove the photo"); }
+    finally { setWomenTileBusy(false); }
+  };
+
+  // Saves one service's own GST %. Empty = back to the default from Settings.
+  const saveServiceGst = async (row: any, input: HTMLInputElement) => {
+    const text = input.value.trim();
+    const next = text === "" ? null : Number(text);
+    const current = row.taxPercent ?? null;
+    if (next === current) return;
+    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 100)) {
+      alert("GST must be a number from 0 to 100. Leave it empty to use the default rate.");
+      input.value = current === null ? "" : String(current);
+      return;
+    }
+    const res = await api.patch<any>(`/services/${row._id}`, { taxPercent: next });
+    if (!res.success) {
+      alert(res.error?.message || "Failed to save GST");
+      input.value = current === null ? "" : String(current);
+      return;
+    }
+    setRows((prev) => prev.map((r) => (r._id === row._id ? { ...r, taxPercent: next } : r)));
+  };
 
   // ── Crop helpers ──────────────────────────────────────────────────────
   const startCrop = (file: File | undefined | null, aspect: number, onComplete: (f: File) => void) => {
@@ -477,9 +588,13 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
         imageUrl: serviceForm.imageUrl,
         webImageUrl: serviceForm.webImageUrl,
         duration: Number(serviceForm.duration),
+        // Per-service fee overrides — empty string = omit → global default applies
+        ...(serviceForm.platformFeePercent !== "" ? { platformFeePercent: Number(serviceForm.platformFeePercent) } : {}),
+        ...(serviceForm.platformFeeFlatInr !== "" ? { platformFeeFlatInr: Number(serviceForm.platformFeeFlatInr) } : {}),
+        ...(serviceForm.taxPercent !== "" ? { taxPercent: Number(serviceForm.taxPercent) } : {}),
       });
       if (!res.success) { alert(res.error?.message || "Failed to create service"); return; }
-      setServiceForm({ name: "", categoryId: "", subCategoryId: "", basePriceInr: "", commissionPercent: "20", description: "", imageUrl: "", webImageUrl: "", duration: "" });
+      setServiceForm({ name: "", categoryId: "", subCategoryId: "", basePriceInr: "", commissionPercent: "20", description: "", imageUrl: "", webImageUrl: "", duration: "", platformFeePercent: "", platformFeeFlatInr: "", taxPercent: "" });
       setShowServiceForm(false);
       fetchRows();
     } finally { setServiceFormBusy(false); }
@@ -556,6 +671,47 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
       ════════════════════════════════════════════════════════════════ */}
       {activeTab === "categories" && (
         <>
+          {/* Combined women's tile — the web + app home page show these three
+              categories as ONE tile, so its photo lives here, not on a category. */}
+          <div style={{ ...card, display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ width: 240, aspectRatio: "4 / 3", borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--border)", background: "linear-gradient(135deg,#b8eee7,#4daba8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {womenTileUrl
+                ? <img src={womenTileUrl} alt="Women’s Salon & Self-Care tile" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                : <span style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>Default artwork</span>}
+            </div>
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <h3 style={{ margin: 0 }}>Women’s Salon &amp; Self-Care</h3>
+                <span className="tag">Web + app home tile</span>
+              </div>
+              <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--muted)" }}>
+                Customers see one tile for <b>Salon for Women</b>, <b>Hair Studio for Women</b> and <b>Makeup Saree Styling</b>.
+                This photo is that tile’s picture on the website and the app. The category images below are not used for it.
+              </p>
+              {womenTileState === "no-access" ? (
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>Your login can’t change Settings, so it can’t set this photo.</div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <label className="button upload-button" style={{ opacity: womenTileBusy || womenTileState === "loading" ? 0.6 : 1 }}>
+                    {womenTileBusy ? "Saving…" : womenTileUrl ? "Change photo" : "Upload photo"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={womenTileBusy || womenTileState === "loading"}
+                      onChange={(e) => { startCrop(e.target.files?.[0], 4 / 3, handleWomenTileUpload); e.target.value = ""; }}
+                    />
+                  </label>
+                  {womenTileUrl && (
+                    <button className="button secondary" disabled={womenTileBusy} onClick={resetWomenTilePhoto}>
+                      Use default artwork
+                    </button>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--muted-2)" }}>Saves straight away. Large photos are shrunk automatically.</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Create form (collapsible) */}
           {showCatForm && (
           <div style={card}>
@@ -949,10 +1105,44 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
               </div>
             </div>
 
+            {/* Row 4 — GST for this service, and an optional platform-fee override */}
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(160px, 1fr) 2fr", gap: 16, marginBottom: 16, alignItems: "start" }}>
+              <div>
+                <span style={label}>GST for this service (%)</span>
+                <div style={{ position: "relative" }}>
+                  <input className="input" type="number" min={0} max={100} step="0.1" placeholder={defaultGst != null ? `Default (${defaultGst})` : "Default"} value={serviceForm.taxPercent} onChange={(e) => setServiceForm(f => ({ ...f, taxPercent: e.target.value }))} style={{ width: "100%", paddingRight: 24 }} />
+                  <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>%</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 3 }}>
+                  Leave empty to use the default from Settings{defaultGst != null ? ` (${defaultGst}%)` : ""}. You can change it any time in the GST % column.
+                </div>
+              </div>
+              <details>
+                <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600, color: "var(--muted)", userSelect: "none" }}>
+                  💰 Platform fee override <span style={{ fontWeight: 400 }}>(optional — leave blank to use the default from Settings)</span>
+                </summary>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
+                  <div>
+                    <span style={label}>Platform Fee (%)</span>
+                    <div style={{ position: "relative" }}>
+                      <input className="input" type="number" min={0} max={100} step="0.1" placeholder="Default" value={serviceForm.platformFeePercent} onChange={(e) => setServiceForm(f => ({ ...f, platformFeePercent: e.target.value }))} style={{ width: "100%", paddingRight: 24 }} />
+                      <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span style={label}>Platform Fee (Flat ₹)</span>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>₹</span>
+                      <input className="input" type="number" min={0} step="1" placeholder="Default" value={serviceForm.platformFeeFlatInr} onChange={(e) => setServiceForm(f => ({ ...f, platformFeeFlatInr: e.target.value }))} style={{ width: "100%", paddingLeft: 22 }} />
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
             <button className="button" style={{ padding: "10px 28px", fontWeight: 600 }} onClick={createService} disabled={serviceFormBusy}>
               {serviceFormBusy ? "Creating..." : "Create Service"}
-            </button>
-          </div>
+            </button>          </div>
           )}
 
           {/* Services list */}
@@ -988,6 +1178,7 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
                   <th>Service</th>
                   <th>Price (₹)</th>
                   <th>Comm %</th>
+                  <th title={`This service's own GST rate. Leave it empty to use the default from Settings${defaultGst != null ? ` (${defaultGst}%)` : ""}.`}>GST %</th>
                   <th>Status</th>
                   <th style={{ textAlign: "center" }} title="Highlighted services appear in the Highlights row on the web and app home pages (shows up to 4)">Highlight</th>
                   <th style={{ textAlign: "right" }}>Actions</th>
@@ -1023,6 +1214,11 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
                             {row.duration ? ` · ${row.duration}m` : ""}
                             {photoCount > 0 ? ` · 📷 ${photoCount}` : ""}
                           </div>
+                          {(row.platformFeePercent != null || row.platformFeeFlatInr != null) && (
+                            <span title="This service has its own platform fee instead of the default (Manage → GST &amp; platform fee)" style={{ display: "inline-block", marginTop: 2, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "#dbeafe", color: "#1e40af" }}>
+                              Custom platform fee
+                            </span>
+                          )}
                           {isACServiceRow(row) && (
                             <select
                               className="input"
@@ -1087,6 +1283,27 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
                       />
                     </td>
                     <td>
+                      <input
+                        key={`gst-${row._id}-${row.taxPercent ?? "default"}`}
+                        className="input"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.1"
+                        style={{ width: 70 }}
+                        defaultValue={row.taxPercent ?? ""}
+                        placeholder={defaultGst != null ? String(defaultGst) : "default"}
+                        title={row.taxPercent != null
+                          ? `${row.name} is charged ${row.taxPercent}% GST. Clear the box to use the default${defaultGst != null ? ` (${defaultGst}%)` : ""}.`
+                          : `${row.name} uses the default GST${defaultGst != null ? ` (${defaultGst}%)` : ""} from Settings. Type a number to give it its own rate.`}
+                        onBlur={(e) => saveServiceGst(row, e.currentTarget)}
+                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                      />
+                      <div style={{ fontSize: 11, marginTop: 3, fontWeight: row.taxPercent != null ? 600 : 400, color: row.taxPercent != null ? "var(--accent)" : "var(--muted)" }}>
+                        {row.taxPercent != null ? "own rate" : "default"}
+                      </div>
+                    </td>
+                    <td>
                       <button
                         className={`tag tag-toggle ${row.isActive ? "tag-active" : "tag-inactive"}`}
                         title={row.isActive ? "Click to disable this service" : "Click to enable this service"}
@@ -1138,6 +1355,9 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
           <div className="menu" style={{ position: "fixed", top, left, width: menuWidth }} onClick={(e) => e.stopPropagation()}>
             <button className="menu-item" onClick={() => { setImagesServiceId(row._id); setMenuFor(null); }}>
               🖼️ Images (app & web)
+            </button>
+            <button className="menu-item" onClick={() => { openFeesModal(row); setMenuFor(null); }}>
+              💰 GST &amp; platform fee{(row.platformFeePercent != null || row.platformFeeFlatInr != null || row.taxPercent != null) ? " ✦" : ""}
             </button>
             <button className="menu-item" onClick={() => { openCancelPolicy(row); setMenuFor(null); }}>
               ↩️ Cancellation policy
@@ -1359,7 +1579,6 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
               </select>
             </label>
 
-
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button className="button secondary" onClick={() => setCancelPolicyService(null)}>Cancel</button>
               <button className="button primary" onClick={saveCancelPolicy} disabled={cancelPolicyBusy}>
@@ -1448,6 +1667,71 @@ export default function ServicesPage({ api }: { api: ApiClient }) {
               <button className="button secondary" onClick={() => setPhotosService(null)}>Cancel</button>
               <button className="button primary" onClick={savePhotos} disabled={photosSaving || photosBusy}>
                 {photosSaving ? "Saving..." : "Save Photos"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Fees & GST modal ──────────────────────────────────────────── */}
+      {feesService && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ backgroundColor: "var(--panel)", padding: 28, borderRadius: 12, width: 500, maxWidth: "95vw" }}>
+            <h3 style={{ marginTop: 0, marginBottom: 4 }}>💰 GST &amp; platform fee</h3>
+            <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 6 }}>
+              <strong>{feesService.name}</strong>
+            </p>
+            <div style={{ fontSize: 12, color: "var(--muted-2)", marginBottom: 20, padding: "8px 12px", background: "var(--panel-alt)", borderRadius: 8, border: "1px solid var(--border)" }}>
+              Leave a field <strong>empty</strong> to use the global default from Settings. Set a value to override for this service only.
+              <div style={{ marginTop: 6 }}>
+                <strong>GST</strong> is charged per service: a booking with services at different GST rates is taxed service by service, each at its own rate. The platform fee follows the booking's main service.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>Platform Fee (%)</label>
+                <div style={{ position: "relative" }}>
+                  <input className="input" type="number" min={0} max={100} step="0.1" placeholder="Global default" value={feePlatformPercent} onChange={(e) => setFeePlatformPercent(e.target.value)} style={{ width: "100%", paddingRight: 24 }} />
+                  <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>%</span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 3 }}>
+                  {feePlatformPercent !== "" ? `Override: ${feePlatformPercent}%` : "Using global"}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>Platform Fee (Flat ₹)</label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>₹</span>
+                  <input className="input" type="number" min={0} step="1" placeholder="Global default" value={feePlatformFlat} onChange={(e) => setFeePlatformFlat(e.target.value)} style={{ width: "100%", paddingLeft: 22 }} />
+                </div>
+                <div style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 3 }}>
+                  {feePlatformFlat !== "" ? `Override: ₹${feePlatformFlat}` : "Using global"}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 4 }}>GST (%)</label>
+                <div style={{ position: "relative" }}>
+                  <input className="input" type="number" min={0} max={100} step="0.1" placeholder={defaultGst != null ? `Default (${defaultGst})` : "Default"} value={feeTaxPercent} onChange={(e) => setFeeTaxPercent(e.target.value)} style={{ width: "100%", paddingRight: 24 }} />
+                  <span style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", color: "var(--muted-2)", fontSize: 12 }}>%</span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--muted-2)", marginTop: 3 }}>
+                  {feeTaxPercent !== "" ? `Own rate: ${feeTaxPercent}%` : `Using the default${defaultGst != null ? ` (${defaultGst}%)` : ""}`}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button
+                className="button secondary"
+                style={{ fontSize: 12 }}
+                onClick={() => { setFeePlatformPercent(""); setFeePlatformFlat(""); setFeeTaxPercent(""); }}
+                title="Clear all overrides — this service will use global defaults from Settings"
+              >
+                Reset to Global
+              </button>
+              <div style={{ flex: 1 }} />
+              <button className="button secondary" onClick={() => setFeesService(null)}>Cancel</button>
+              <button className="button" onClick={saveFeesModal} disabled={feesSaving}>
+                {feesSaving ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
